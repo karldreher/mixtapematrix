@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "mixtapematrix"
+version = "0.1.0"
+description = ""
+authors = ["Karl Dreher"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pytaglib = "^3.0.0"
+pydantic = "^2.9.0"
+pyyaml = "^6.0.2"
+# TODO while i don't care about windows anymore, 
+# win needs python-magic-bin which could be a good reason to switch to golang
+eyed3 = "^0.9.7"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+matrix = "mixtapematrix.main:main"

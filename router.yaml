@@ -1,0 +1,6 @@
+sources:
+  - source_path: ./testfiles
+    destination_path: ./testfiles/nextpath
+    mp3_files: 
+      - genre: funk
+      - artist: "Fear Factory"
