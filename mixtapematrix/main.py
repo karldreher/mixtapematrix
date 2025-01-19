@@ -1,4 +1,4 @@
-from .routers.files import File, FileRouter
+from .routers.files import File
 from .routers.mp3_router import TagRouter
 import yaml
 
@@ -9,21 +9,22 @@ class MixtapeMatrix:
         self.config_data = self.load_config()
 
     def load_config(self):
-        with open(self.config, 'r') as f:
+        with open(self.config, "r") as f:
             return yaml.safe_load(f)
 
     def run(self):
         # TODO: pydantic this thing
-        for source in self.config_data.get('sources', []):
+        for source in self.config_data.get("sources", []):
             print(f"Copying {source}")
-            source_file = File(path=source.get('source_path'))
-            destination_file = File(path=source.get('destination_path'))
+            source_file = File(path=source.get("source_path"))
+            destination_file = File(path=source.get("destination_path"))
             if source_file.is_dir and source_file.path in destination_file.path:
-                raise ValueError(f"Source {source_file.path} is a directory and is a subdirectory of destination {destination_file.path}. \
-                    This is not allowed, because it will recursively copy the files.")
-                
+                raise ValueError(
+                    f"Source {source_file.path} is a directory and is a subdirectory of destination {destination_file.path}. This is not allowed, because it will recursively copy the files."
+                )
+
             # print(f"Destination: {destination_file.path}")
-            for i in source.get('mp3_files', []):
+            for i in source.get("mp3_files", []):
                 for k, v in i.items():
                     router = TagRouter.source(source_file, k, v)
                     for file in set(router):
@@ -33,7 +34,6 @@ class MixtapeMatrix:
                         # attribute decisions at class level
                         TagRouter.deeply_copy(file, source_file, destination_file)
 
-                    
 
 def main():
     # TODO obviously get this from the command line, but default to CWD

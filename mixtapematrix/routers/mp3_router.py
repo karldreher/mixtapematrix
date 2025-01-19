@@ -4,6 +4,7 @@ import eyed3
 
 from .files import FileRouter, File
 
+
 class TagRouter(FileRouter):
     @staticmethod
     def source(file_path: File, tag: str, value: str) -> Generator[File, None, None]:
@@ -26,11 +27,12 @@ class TagRouter(FileRouter):
                             # We most likely want to support just a few select tags, but genre should be one
                             if audiofile.tag.genre.name.lower() == value:
                                 yield File(path=os.path.join(root, file))
-                        
+
                         # All other tags, but primarily geared toward artist / album
                         audiofile_tag = getattr(audiofile.tag, tag)
                         if str(audiofile_tag).lower() == value.lower():
                             yield File(path=os.path.join(root, file))
         else:
-            raise ValueError(f"MP3 TagRouter only works on directories, not individual files.")
-
+            raise ValueError(
+                "MP3 TagRouter only works on directories, not individual files."
+            )
