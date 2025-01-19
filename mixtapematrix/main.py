@@ -1,4 +1,4 @@
-from .lib.router import File, FileRouter
+from .routers.files import File, FileRouter
 import yaml
 
 
