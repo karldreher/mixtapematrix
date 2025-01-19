@@ -37,19 +37,23 @@ class FileRouter(ABC):
         return file_path
     @classmethod
     # TODO is this a class method or a static method?
-    def deeply_copy(cls, source: File, destination: File):
+    def deeply_copy(cls, source: File, root_source: File, destination: File) -> None:
+        destination_file = source.path.replace(root_source.path, destination.path)
         try:
-            # TODO : broken yet, not copying because destination is a dir ( which is what we want)
-            if source.is_dir:
-                if not os.path.exists(destination.path):
-                    os.makedirs(destination.path)
-                shutil.copytree(source.path, destination.path)
-            elif source.is_file:
-                if not os.path.exists(destination.path):
-                    os.makedirs(destination.path)
-                shutil.copyfile(source.path, destination.path)
+            if os.path.exists(destination_file):
+                # Do nothing, we already copied this file
+                # logging.debug(f"File {destination_file} already exists, skipping")
+                pass
+            else:
+                new_dir = os.path.dirname(destination_file)
+                if not os.path.exists(new_dir):
+                    os.makedirs(new_dir)
+                if source.is_dir:    
+                    shutil.copytree(source.path, destination_file)
+                elif source.is_file:
+                    shutil.copyfile(source.path, destination_file)
         except Exception as e:
-            print(f"Error copying {source.path} to {destination.path}: {e}")
+            print(f"Error copying {source.path} to {destination_file}: {e}")
             sys.exit(1)
     
 

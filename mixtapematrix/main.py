@@ -18,17 +18,21 @@ class MixtapeMatrix:
             print(f"Copying {source}")
             source_file = File(path=source.get('source_path'))
             destination_file = File(path=source.get('destination_path'))
-            print(f"Destination: {destination_file.path}")
+            if source_file.is_dir and source_file.path in destination_file.path:
+                raise ValueError(f"Source {source_file.path} is a directory and is a subdirectory of destination {destination_file.path}. \
+                                 This is not allowed, because it will recursively copy the files.")
+                
+            # print(f"Destination: {destination_file.path}")
             for i in source.get('mp3_files', []):
                 for k, v in i.items():
                     router = TagRouter.source(source_file, k, v)
                     # TODO: didn't catch genre yet, could be a file problem
                     for file in router:
                         # TODO Debug log this thing
-                        print(f"Copying {file.path} to {destination_file.path}")
+                        # print(f"Copying {file.path} to {destination_file.path}")
                         # TODO: not terribly optimized and could be invalid based on
                         # attribute decisions at class level
-                        TagRouter.deeply_copy(file, destination_file)
+                        TagRouter.deeply_copy(file, source_file, destination_file)
 
                     
 
