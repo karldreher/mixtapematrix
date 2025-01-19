@@ -26,8 +26,7 @@ class MixtapeMatrix:
             for i in source.get('mp3_files', []):
                 for k, v in i.items():
                     router = TagRouter.source(source_file, k, v)
-                    # TODO: didn't catch genre yet, could be a file problem
-                    for file in router:
+                    for file in set(router):
                         # TODO Debug log this thing
                         # print(f"Copying {file.path} to {destination_file.path}")
                         # TODO: not terribly optimized and could be invalid based on
@@ -37,5 +36,6 @@ class MixtapeMatrix:
                     
 
 def main():
+    # TODO obviously get this from the command line, but default to CWD
     matrix = MixtapeMatrix("router.yaml")
     matrix.run()

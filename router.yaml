@@ -1,5 +1,7 @@
 sources:
   - source_path: ./testfiles
+    # TODO
+    # exclude_path: ./testfiles/exclude
     destination_path: ./test_output
     mp3_files: 
       - genre: funk

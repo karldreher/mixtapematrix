@@ -1,4 +1,3 @@
-import taglib
 import os
 import sys
 import json
@@ -10,6 +9,7 @@ import shutil
 
 class File(BaseModel):
     path: str
+    __hash__ = object.__hash__
     
     @computed_field
     @property

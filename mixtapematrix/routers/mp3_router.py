@@ -16,19 +16,21 @@ class TagRouter(FileRouter):
             for root, dirs, files in os.walk(file_path.path):
                 for file in files:
                     if file.endswith(".mp3"):
-                        audiofile = eyed3.load(f"{root}/{file}")
+                        try:
+                            audiofile = eyed3.load(path=os.path.join(root, file))
+                        except Exception as e:
+                            print(f"Error loading {os.path.join(root, file)}: {e}")
+                            continue
                         if tag == "genre":
-                            print(f"audiofile.tag.genre.name: {audiofile.tag.genre.name}")
                             # Genre is a special case
-                            # We might want to support just a couple select tags, but genre should be one
-
+                            # We most likely want to support just a few select tags, but genre should be one
                             if audiofile.tag.genre.name.lower() == value:
-                                yield File(path=f"{root}/{file}")
+                                yield File(path=os.path.join(root, file))
                         
                         # All other tags, but primarily geared toward artist / album
                         audiofile_tag = getattr(audiofile.tag, tag)
                         if str(audiofile_tag).lower() == value.lower():
-                            yield File(path=f"{root}/{file}")
+                            yield File(path=os.path.join(root, file))
         else:
             raise ValueError(f"MP3 TagRouter only works on directories, not individual files.")
 
