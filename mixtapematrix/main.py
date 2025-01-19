@@ -20,7 +20,7 @@ class MixtapeMatrix:
             destination_file = File(path=source.get('destination_path'))
             if source_file.is_dir and source_file.path in destination_file.path:
                 raise ValueError(f"Source {source_file.path} is a directory and is a subdirectory of destination {destination_file.path}. \
-                                 This is not allowed, because it will recursively copy the files.")
+                    This is not allowed, because it will recursively copy the files.")
                 
             # print(f"Destination: {destination_file.path}")
             for i in source.get('mp3_files', []):
