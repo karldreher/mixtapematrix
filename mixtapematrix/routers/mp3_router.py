@@ -18,7 +18,10 @@ class TagRouter(FileRouter):
                     if file.endswith(".mp3"):
                         audiofile = eyed3.load(f"{root}/{file}")
                         audiofile_tag = getattr(audiofile.tag, tag)
-                        if audiofile_tag == value:
+                        # TODO Genre is weird, it could be an Enum.
+                        # We might want to support just a couple select tags, but genre should be one
+                        print(f"audiofile_tag: {audiofile_tag}")
+                        if str(audiofile_tag).lower() == value.lower():
                             yield File(path=f"{root}/{file}")
         else:
             raise ValueError(f"MP3 TagRouter only works on directories, not individual files.")
