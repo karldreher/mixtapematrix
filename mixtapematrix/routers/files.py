@@ -3,13 +3,23 @@ import os
 import sys
 import json
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, computed_field
 from typing import List, Dict, Any
 import shutil
 
 
 class File(BaseModel):
     path: str
+    
+    @computed_field
+    @property
+    def is_dir(self) -> bool:
+        return os.path.isdir(self.path)
+    @computed_field
+    @property
+    def is_file(self) -> bool:
+        return os.path.isfile(self.path)
+    
     @field_validator('path')
     @classmethod
     def validate_path(cls, path):
