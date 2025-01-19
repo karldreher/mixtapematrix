@@ -7,14 +7,20 @@ from .files import FileRouter, File
 
 class TagRouter(FileRouter):
     @staticmethod
-    def source(file_path: File, tag: str, value: str) -> Generator[File, None, None]:
+    def source(file_path: File, excluded_path: str, tag: str, value: str) -> Generator[File, None, None]:
         """
-        param file_path: File
-        param tag: str A tag to identify matching files (e.g. Artist)
-        param value: str A value to match the tag against (e.g. David Byrne)
+        param file_path: The file path to search for MP3 files
+        # TODO: file_path could be better named
+        param excluded_path: A path to exclude from the search
+        param tag: A tag to identify matching files (e.g. Artist)
+        param value: A value to match the tag against (e.g. David Byrne)
         """
         if file_path.is_dir:
             for root, dirs, files in os.walk(file_path.path):
+                # If we have an excluded path, we want to skip it
+                if excluded_path and excluded_path in root:
+                    continue
+
                 for file in files:
                     if file.endswith(".mp3"):
                         try:

@@ -21,4 +21,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-matrix = "mixtapematrix.main:main"
+mixtapematrix = "mixtapematrix.main:main"

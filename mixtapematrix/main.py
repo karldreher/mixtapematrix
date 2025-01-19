@@ -18,6 +18,7 @@ class MixtapeMatrix:
             print(f"Copying {source}")
             source_file = File(path=source.get("source_path"))
             destination_file = File(path=source.get("destination_path"))
+            exclude_path = source.get("exclude_path", None)
             if source_file.is_dir and source_file.path in destination_file.path:
                 raise ValueError(
                     f"Source {source_file.path} is a directory and is a subdirectory of destination {destination_file.path}. This is not allowed, because it will recursively copy the files."
@@ -26,7 +27,7 @@ class MixtapeMatrix:
             # print(f"Destination: {destination_file.path}")
             for i in source.get("mp3_files", []):
                 for k, v in i.items():
-                    router = TagRouter.source(source_file, k, v)
+                    router = TagRouter.source(source_file, exclude_path, k, v)
                     for file in set(router):
                         # TODO Debug log this thing
                         # print(f"Copying {file.path} to {destination_file.path}")
