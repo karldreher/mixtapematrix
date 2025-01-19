@@ -32,17 +32,24 @@ class File(BaseModel):
 class FileRouter(ABC):
     @abstractmethod
     # TODO: is file_path always a List of Files?
-    def source(self, file_path: File):
+    # Is it actually a Class Attribute rather than a method?
+    def source(file_path: File):
         return file_path
     @classmethod
-    def deeply_copy(cls, file_path: File, destination: str):
+    # TODO is this a class method or a static method?
+    def deeply_copy(cls, source: File, destination: File):
         try:
-            if os.path.isdir(file_path.path):
-                shutil.copytree(file_path.path, destination)
-            else:
-                shutil.copyfile(file_path.path, destination)
+            # TODO : broken yet, not copying because destination is a dir ( which is what we want)
+            if source.is_dir:
+                if not os.path.exists(destination.path):
+                    os.makedirs(destination.path)
+                shutil.copytree(source.path, destination.path)
+            elif source.is_file:
+                if not os.path.exists(destination.path):
+                    os.makedirs(destination.path)
+                shutil.copyfile(source.path, destination.path)
         except Exception as e:
-            print(f"Error copying {file_path} to {destination}: {e}")
+            print(f"Error copying {source.path} to {destination.path}: {e}")
             sys.exit(1)
     
 

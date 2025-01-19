@@ -1,4 +1,5 @@
 from .routers.files import File, FileRouter
+from .routers.mp3_router import TagRouter
 import yaml
 
 
@@ -19,12 +20,17 @@ class MixtapeMatrix:
             destination_file = File(path=source.get('destination_path'))
             print(f"Destination: {destination_file.path}")
             for i in source.get('mp3_files', []):
-                # TODO Make this more dynamic according to supported routers
-                if i.get('artist'):
-                    print(f"Artist: {i.get('artist')}")
+                for k, v in i.items():
+                    router = TagRouter.source(source_file, k, v)
+                    # TODO: didn't catch genre yet, could be a file problem
+                    for file in router:
+                        # TODO Debug log this thing
+                        print(f"Copying {file.path} to {destination_file.path}")
+                        # TODO: not terribly optimized and could be invalid based on
+                        # attribute decisions at class level
+                        TagRouter.deeply_copy(file, destination_file)
 
-            #     router = FileRouter.get_router(source_file, destination_file)
-            #     router.deeply_copy(source_file, destination_file)
+                    
 
 def main():
     matrix = MixtapeMatrix("router.yaml")
