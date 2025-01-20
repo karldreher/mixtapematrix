@@ -1,4 +1,4 @@
-sources:
+matrix:
   - source_path: ./testfiles
   
     exclude_path: ./testfiles/exclude

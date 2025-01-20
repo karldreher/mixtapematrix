@@ -1,8 +1,10 @@
 from mixtapematrix.main import MixtapeMatrix
 
 
-def test_config():
+def test_config(mkdirs):
     matrix = MixtapeMatrix("test/router.yaml")
-    assert matrix.config == "test/router.yaml"
-    assert matrix.config_data.get("sources")[0].get("source_path") == "test/source"
-    assert matrix.config_data.get("sources")[0].get("destination_path") == "test/output"
+    config = matrix.load_config()
+    # This actually gets pretty far, because the ConfigFile model is highly validated.
+    assert config
+    assert config.matrix[0].source.path == "test/source"
+    assert config.matrix[0].destination.path == "test/output"

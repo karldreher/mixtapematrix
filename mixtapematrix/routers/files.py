@@ -3,6 +3,7 @@ import sys
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, field_validator, computed_field
 import shutil
+from typing import Generator
 
 
 class File(BaseModel):
@@ -56,3 +57,17 @@ class FileRouter(ABC):
         except Exception as e:
             print(f"Error copying {source.path} to {destination_file}: {e}")
             sys.exit(1)
+
+
+def search_files(
+    source_path: str, exclude_path: str = None
+) -> Generator[str, None, None]:
+    """
+    Walk the source path and yield all files.
+    If exclude_path is provided, skip any files in that path.
+    """
+    for root, dirs, files in os.walk(source_path):
+        if exclude_path and exclude_path in root:
+            continue
+        for file in files:
+            yield os.path.join(root, file)

@@ -1,4 +1,4 @@
-sources:
+matrix:
   - source_path: test/source
     exclude_path: test/source/exclude
     destination_path: test/output
