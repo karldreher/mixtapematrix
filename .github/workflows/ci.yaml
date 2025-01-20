@@ -1,0 +1,26 @@
+name: CI/CD
+on:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-24.04
+    steps: 
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+
+      - name: Install Poetry
+        run: |
+          pip install pipx
+          pipx ensurepath
+          pipx install poetry
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev
+
+      - name: Run tests
+        run: |
+          poetry run pytest -v
