@@ -7,7 +7,9 @@ from .files import FileRouter, File
 
 class TagRouter(FileRouter):
     @staticmethod
-    def source(file_path: File, excluded_path: str, tag: str, value: str) -> Generator[File, None, None]:
+    def source(
+        file_path: File, excluded_path: str, tag: str, value: str
+    ) -> Generator[File, None, None]:
         """
         param file_path: The file path to search for MP3 files
         # TODO: file_path could be better named
