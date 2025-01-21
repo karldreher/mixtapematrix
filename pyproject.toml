@@ -37,7 +37,7 @@ mmatrix = "mixtapematrix.main:main"
 
 
 [tool.semantic_release]
-version_variables = ["mixtapematrix.__init__.py:__version__"]
+version_variables = ["mixtapematrix/__init__.py:__version__"]
 
 [tool.semantic_release.branches.main]
 match = "(main|master)"
