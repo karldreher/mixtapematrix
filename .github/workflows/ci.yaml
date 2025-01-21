@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.base_ref }}
+          # ref: ${{ github.base_ref }}
 
       - name: Install poetry
         run: pipx install poetry
@@ -47,7 +47,7 @@ jobs:
       - name: Python setup
         uses: actions/setup-python@v5
         with:
-          python-version-file: ".python-version"
+          python-version-file: .python-version
           cache: "poetry"
 
       - name: Poetry Install
