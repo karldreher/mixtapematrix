@@ -1,4 +1,4 @@
-<img src="logo.webp" alt="drawing" width="250"/>
+<center><img src="logo.webp" alt="drawing" width="300"/></center>
 
 
 ~an idea worth tens of dollars total~
