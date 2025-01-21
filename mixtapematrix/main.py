@@ -1,6 +1,7 @@
 from .routers.mp3_router import TagRouter
 from .config import ConfigFile
 import yaml
+import click
 
 
 class MixtapeMatrix:
@@ -25,7 +26,9 @@ class MixtapeMatrix:
                 )
 
 
-def main():
+@click.command()
+@click.option("--config", default="matrix.yaml", help="The YAML configuration file")
+def cli(config):
     # TODO obviously get this from the command line, but default to CWD
-    matrix = MixtapeMatrix("matrix.yaml")
+    matrix = MixtapeMatrix(config=config)
     matrix.run()
