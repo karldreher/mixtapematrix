@@ -1,0 +1,8 @@
+matrix:
+  - source_path: ./testfiles
+  
+    exclude_path: ./testfiles/exclude
+    destination_path: ./test_output
+    mp3_files: 
+      - genre: funk
+      - artist: "Fear Factory"

@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "mixtapematrix"
+version = "0.1.0"
+description = ""
+authors = ["Karl Dreher"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+pydantic = "^2.9.0"
+pyyaml = "^6.0.2"
+# TODO while i don't care about windows anymore, 
+# win needs python-magic-bin which could be a good reason to switch to golang
+eyed3 = "^0.9.7"
+
+[tool.poetry.group.dev]
+optional = true
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.4"
+pytest = "^8.3.4"
+
+
+[tool.poetry.group.release]
+optional = true
+
+[tool.poetry.group.release.dependencies]
+python-semantic-release = "^9.16.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+mixtapematrix = "mixtapematrix.main:main"
+mmatrix = "mixtapematrix.main:main"
+
+
+[tool.semantic_release]
+version_variables = ["mixtapematrix/__init__.py:__version__"]
+
+[tool.semantic_release.branches.main]
+match = "(main|master)"
+
+[tool.semantic_release.branches.preview]
+# this is only here to get previews of release bumps
+match = ".+"
+
+[tool.semantic_release.remote.token]
+env = "GH_TOKEN"
+
