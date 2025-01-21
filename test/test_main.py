@@ -2,7 +2,7 @@ from mixtapematrix.main import MixtapeMatrix
 
 
 def test_config(mkdirs):
-    matrix = MixtapeMatrix("test/router.yaml")
+    matrix = MixtapeMatrix("test/matrix.yaml")
     config = matrix.load_config()
     # This actually gets pretty far, because the ConfigFile model is highly validated.
     assert config

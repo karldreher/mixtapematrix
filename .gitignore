@@ -1,5 +1,8 @@
 # Project stuff
 *.mp3
+matrix.yaml
+# Allow the test file.
+!test/matrix.yaml
 
 # Stupid crap 
 *.DS_Store

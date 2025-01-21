@@ -27,5 +27,5 @@ class MixtapeMatrix:
 
 def main():
     # TODO obviously get this from the command line, but default to CWD
-    matrix = MixtapeMatrix("router.yaml")
+    matrix = MixtapeMatrix("matrix.yaml")
     matrix.run()
