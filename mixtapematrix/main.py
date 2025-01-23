@@ -10,14 +10,15 @@ class MixtapeMatrix:
         self.config_data = self.load_config()
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
+
     def load_config(self) -> ConfigFile:
         with open(self.config, "r") as f:
             return ConfigFile.model_validate(yaml.safe_load(f))
 
     def run(self):
         for matrix_config in self.config_data.matrix:
-            router = TagRouter.source(matrix_config)
-            for file in set(router):
+            router = TagRouter(matrix_config)
+            for file in router.source:
                 self.debug(f"Copying {file.path} to {matrix_config.destination.path}")
                 # TODO: not terribly optimized and could be invalid based on
                 # attribute decisions at class level
