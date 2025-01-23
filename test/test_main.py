@@ -1,5 +1,5 @@
-from mixtapematrix.main import MixtapeMatrix
-
+from mixtapematrix.main import MixtapeMatrix, cli
+import click
 
 def test_config(mkdirs):
     matrix = MixtapeMatrix("test/matrix.yaml")
@@ -8,3 +8,6 @@ def test_config(mkdirs):
     assert config
     assert config.matrix[0].source.path == "test/source"
     assert config.matrix[0].destination.path == "test/output"
+
+def test_cli():
+    assert type(cli) == click.core.Command

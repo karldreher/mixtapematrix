@@ -5,10 +5,11 @@ import click
 
 
 class MixtapeMatrix:
-    def __init__(self, config: str):
+    def __init__(self, config: str, debug: bool = False):
         self.config = config
         self.config_data = self.load_config()
-
+        self.logger = click.echo
+        self.debug = self.logger if debug else lambda x: None
     def load_config(self) -> ConfigFile:
         with open(self.config, "r") as f:
             return ConfigFile.model_validate(yaml.safe_load(f))
@@ -17,8 +18,7 @@ class MixtapeMatrix:
         for matrix_config in self.config_data.matrix:
             router = TagRouter.source(matrix_config)
             for file in set(router):
-                # TODO Debug log this thing
-                # print(f"Copying {file.path} to {destination_file.path}")
+                self.debug(f"Copying {file.path} to {matrix_config.destination.path}")
                 # TODO: not terribly optimized and could be invalid based on
                 # attribute decisions at class level
                 TagRouter.deeply_copy(
@@ -28,7 +28,7 @@ class MixtapeMatrix:
 
 @click.command()
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
-def cli(config):
-    # TODO obviously get this from the command line, but default to CWD
-    matrix = MixtapeMatrix(config=config)
+@click.option("--debug", default=False, help="Enable debug logging")
+def cli(config, debug):
+    matrix = MixtapeMatrix(config=config, debug=debug)
     matrix.run()
