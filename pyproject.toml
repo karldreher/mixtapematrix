@@ -36,6 +36,8 @@ build-backend = "poetry.core.masonry.api"
 mixtapematrix = "mixtapematrix.main:cli"
 mmatrix = "mixtapematrix.main:cli"
 
+[tool.pytest.ini_options]
+addopts = "-v"
 
 [tool.semantic_release]
 version_variables = ["mixtapematrix/__init__.py:__version__"]
