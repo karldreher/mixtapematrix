@@ -1,5 +1,6 @@
 from .routers.mp3_router import TagRouter
 from .config import ConfigFile, create_default_config
+from functools import cached_property
 import yaml
 import click
 
@@ -7,11 +8,11 @@ import click
 class MixtapeMatrix:
     def __init__(self, config: str, debug: bool = False):
         self.config = config
-        self.config_data = self.load_config()
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
 
-    def load_config(self) -> ConfigFile:
+    @cached_property
+    def config_data(self) -> ConfigFile:
         with open(self.config, "r") as f:
             return ConfigFile.model_validate(yaml.safe_load(f))
 
