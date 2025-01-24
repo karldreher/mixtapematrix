@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.1.0 (2025-01-24)
+
+### Features
+
+- Click ([#2](https://github.com/karldreher/mixtapematrix/pull/2),
+  [`dcee346`](https://github.com/karldreher/mixtapematrix/commit/dcee346b13ef26dc5ecbec7a450bb004080ba215))
+
+
 ## v1.0.0 (2025-01-21)
 
 ### Bug Fixes
@@ -33,6 +41,9 @@
 
 - Semantic-release
   ([`3a87c5a`](https://github.com/karldreher/mixtapematrix/commit/3a87c5a04b6dba9066b4cfd48b8c520a95a02dd5))
+
+- Update pyproject.toml
+  ([`46f79db`](https://github.com/karldreher/mixtapematrix/commit/46f79dbc95bd43e273237103f04c7098c9853ea9))
 
 ### Continuous Integration
 
@@ -76,11 +87,23 @@
 - A heck of a python initial commit
   ([`095fded`](https://github.com/karldreher/mixtapematrix/commit/095fdedfca15bd90107e7b8b7d571d5cc4e02a60))
 
+- Click
+  ([`efafae7`](https://github.com/karldreher/mixtapematrix/commit/efafae766568113c341dae5be8987b2f2ffaa996))
+
+- Create config file
+  ([`2e7eba3`](https://github.com/karldreher/mixtapematrix/commit/2e7eba38dbf3d03ab6a8aba491f46171e50ce2c3))
+
+- Debug logging
+  ([`f3af2d6`](https://github.com/karldreher/mixtapematrix/commit/f3af2d68da9d5cab9e8bf3b242cb5499d1903868))
+
 - Exclude path
   ([`1e23585`](https://github.com/karldreher/mixtapematrix/commit/1e235858430400704cddd7c2753c1da49c9c75eb))
 
 - Initial commit tags stuff
   ([`96bfef0`](https://github.com/karldreher/mixtapematrix/commit/96bfef01ed8528c9f8956804882fc67c771aaa71))
+
+- Make interface more classful
+  ([`988d08b`](https://github.com/karldreher/mixtapematrix/commit/988d08b7fea86b0f82b5d6ab25102b9750a1dada))
 
 - Python mixtape matrix ([#1](https://github.com/karldreher/mixtapematrix/pull/1),
   [`4a772f9`](https://github.com/karldreher/mixtapematrix/commit/4a772f9580280debf20d759dad061fe1d70840c5))
@@ -97,6 +120,9 @@
   ([`44b8b2e`](https://github.com/karldreher/mixtapematrix/commit/44b8b2e8fe732e83b3f92418cbfdbf9ebd320b15))
 
 ### Testing
+
+- Add pytest options and more coverage
+  ([`fd2ad8f`](https://github.com/karldreher/mixtapematrix/commit/fd2ad8f14dd4b8690d552eab5ee4c8f45fd59c73))
 
 - Add tests
   ([`9b61f86`](https://github.com/karldreher/mixtapematrix/commit/9b61f86653f2aa5803cc4817735dcc869ab2c2ea))

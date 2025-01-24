@@ -1,6 +1,6 @@
 [project]
 name = "mixtapematrix"
-version = "1.0.0"
+version = "1.1.0"
 description = "Declarative MP3 File Management for passionate listeners."
 authors = [{name = "Karl Dreher"}]
 readme = "README.md"
