@@ -38,7 +38,7 @@ build-backend = "hatchling.build"
 addopts = "-v --cov"
 
 [tool.coverage.run]
-omit = [".venv*", "test/*"]
+omit = [".venv*", "test/*", "*__init__*"]
 
 [tool.semantic_release]
 version_variables = ["mixtapematrix/__init__.py:__version__"]

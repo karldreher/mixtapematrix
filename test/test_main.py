@@ -7,16 +7,15 @@ import yaml
 
 def test_config(mkdirs):
     matrix = MixtapeMatrix("test/matrix.yaml")
-    config = matrix.load_config()
     # This actually gets pretty far, because the ConfigFile model is highly validated.
-    assert config
-    assert config.matrix[0].source.path == "test/source"
-    assert config.matrix[0].destination.path == "test/output"
+    assert matrix.config_data
+    assert matrix.config_data.matrix[0].source.path == "test/source"
+    assert matrix.config_data.matrix[0].destination.path == "test/output"
 
 
 def test_invalid_config():
     with pytest.raises(ValueError):
-        matrix = MixtapeMatrix("test/invalid.yaml")
+        matrix = MixtapeMatrix("test/invalid.yaml").config_data
     with pytest.raises(ValueError):
         with open("test/invalid.yaml", "r") as f:
             # same as above, but more directly catching the error we expect
