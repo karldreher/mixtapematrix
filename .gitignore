@@ -2,8 +2,6 @@
 *.mp3
 matrix.yaml
 
-# cool, but not just yet
-uv.lock
 
 # Allow the test file.
 !test/matrix.yaml
