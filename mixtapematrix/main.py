@@ -1,5 +1,5 @@
 from .routers.mp3_router import TagRouter
-from .config import ConfigFile
+from .config import ConfigFile, create_default_config
 import yaml
 import click
 
@@ -29,7 +29,10 @@ class MixtapeMatrix:
 
 @click.command()
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
+@click.option("--create-config", help="Create a default configuration file", is_flag=True)
 @click.option("--debug", default=False, help="Enable debug logging")
-def cli(config, debug):
+def cli(config, create_config, debug):
+    if create_config:
+        create_default_config()
     matrix = MixtapeMatrix(config=config, debug=debug)
     matrix.run()
