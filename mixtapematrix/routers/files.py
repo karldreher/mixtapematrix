@@ -35,6 +35,7 @@ class FileRouter(ABC):
     @abstractmethod
     def source(self) -> Generator[File, None, None]:
         raise NotImplementedError
+
     @staticmethod
     def deeply_copy(source: File, root_source: File, destination: File) -> None:
         destination_file = source.path.replace(root_source.path, destination.path)

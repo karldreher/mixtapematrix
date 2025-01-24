@@ -29,7 +29,9 @@ class MixtapeMatrix:
 
 @click.command()
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
-@click.option("--create-config", help="Create a default configuration file", is_flag=True)
+@click.option(
+    "--create-config", help="Create a default configuration file", is_flag=True
+)
 @click.option("--debug", default=False, help="Enable debug logging")
 def cli(config, create_config, debug):
     if create_config:
