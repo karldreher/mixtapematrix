@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v2.0.0 (2025-01-24)
+
+### Build System
+
+- Switch to uv package management ([#3](https://github.com/karldreher/mixtapematrix/pull/3),
+  [`679b0af`](https://github.com/karldreher/mixtapematrix/commit/679b0afd23e08e9c36d519a41319717f015d0212))
+
+- Use uv instead of poetry
+  ([`4f2b729`](https://github.com/karldreher/mixtapematrix/commit/4f2b729f2c7359ac033b6d9f79b791c232acc54b))
+
+### Chores
+
+- Format
+  ([`211aece`](https://github.com/karldreher/mixtapematrix/commit/211aece3c43989d5817dd35a29ee747fca5bc9f6))
+
+### Continuous Integration
+
+- Rm poetry
+  ([`b8d07b6`](https://github.com/karldreher/mixtapematrix/commit/b8d07b6c49e50c27af64b326b37452fa8867d213))
+
+- Switch to uv
+  ([`74f4c54`](https://github.com/karldreher/mixtapematrix/commit/74f4c549343dfff33503c42940fd2419380ce726))
+
+
 ## v1.1.0 (2025-01-24)
 
 ### Features
