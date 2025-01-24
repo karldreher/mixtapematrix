@@ -32,7 +32,7 @@ class MixtapeMatrix:
 @click.option(
     "--create-config", help="Create a default configuration file", is_flag=True
 )
-@click.option("--debug", default=False, help="Enable debug logging")
+@click.option("--debug", help="Enable debug logging", is_flag=True)
 def cli(config, create_config, debug):
     if create_config:
         create_default_config()
