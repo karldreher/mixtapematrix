@@ -31,15 +31,12 @@ class File(BaseModel):
 
 
 class FileRouter(ABC):
+    @property
     @abstractmethod
-    # TODO: is file_path always a List of Files?
-    # Is it actually a Class Attribute rather than a method?
-    def source(file_path: File):
-        return file_path
-
-    @classmethod
-    # TODO is this a class method or a static method?
-    def deeply_copy(cls, source: File, root_source: File, destination: File) -> None:
+    def source(self) -> Generator[File, None, None]:
+        raise NotImplementedError
+    @staticmethod
+    def deeply_copy(source: File, root_source: File, destination: File) -> None:
         destination_file = source.path.replace(root_source.path, destination.path)
         try:
             if os.path.exists(destination_file):

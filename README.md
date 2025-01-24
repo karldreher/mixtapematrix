@@ -29,8 +29,7 @@ Pipx is reccomended for install.
 pipx install git+https://github.com/karldreher/mixtapematrix.git
 ```
 
-Once installed, you need to generate a *config file*.  It should be `.yaml` and in the current working directory.  (More paths coming soon).
-
+Once installed, you need to generate a *config file*.  
 
 ```yaml
 matrix:
@@ -44,12 +43,15 @@ matrix:
       - artist: "Fear Factory"
 ```
 
-The config file will find any files in `source_path`, which match the directives in `mp3_files`.  If you want to keep funk and Fear Factory in your mixtape, the config file above is half-done for you!
+You can create a default config file with `--create-config`.  
+
+Based on the config file, Mixtape Matrix will find any files in `source_path`, which match the directives in `mp3_files`.  If you want to keep funk and Fear Factory in your mixtape, the config file above is half-done for you!
 
 ## Run the tool
 
 ```
 mixtapematrix
 # Or, the handy "mmatrix"
+# Try --help to learn more!
 ```
 After running, this will send the files from `source_path` to `destination_path` accordingly.

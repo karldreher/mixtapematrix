@@ -1,8 +1,8 @@
-[tool.poetry]
+[project]
 name = "mixtapematrix"
-version = "0.1.0"
-description = ""
-authors = ["Karl Dreher"]
+version = "1.0.0"
+description = "Declarative MP3 File Management for passionate listeners."
+authors = [{name = "Karl Dreher"}]
 readme = "README.md"
 
 [tool.poetry.dependencies]
@@ -12,6 +12,7 @@ pyyaml = "^6.0.2"
 # TODO while i don't care about windows anymore, 
 # win needs python-magic-bin which could be a good reason to switch to golang
 eyed3 = "^0.9.7"
+click = "^8.1.8"
 
 [tool.poetry.group.dev]
 optional = true
@@ -32,12 +33,15 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-mixtapematrix = "mixtapematrix.main:main"
-mmatrix = "mixtapematrix.main:main"
+mixtapematrix = "mixtapematrix.main:cli"
+mmatrix = "mixtapematrix.main:cli"
 
+[tool.pytest.ini_options]
+addopts = "-v"
 
 [tool.semantic_release]
 version_variables = ["mixtapematrix/__init__.py:__version__"]
+version_toml = ["pyproject.toml:project.version"]
 
 [tool.semantic_release.branches.main]
 match = "(main|master)"

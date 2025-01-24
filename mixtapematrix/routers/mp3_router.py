@@ -6,23 +6,24 @@ from ..config import MatrixConfig
 
 
 class TagRouter(FileRouter):
-    @staticmethod
-    def source(matrix_config: MatrixConfig) -> Generator[File, None, None]:
-        """
-        param file_path: The file path to search for MP3 files
-        #### TODO: file_path could be better named
-        param excluded_path: A path to exclude from the search
-        param tag: A tag to identify matching files (e.g. Artist)
-        param value: A value to match the tag against (e.g. David Byrne)
-        """
-        if matrix_config.source.is_file:
-            raise ValueError(
-                f"{matrix_config.source.path} is not a directory.  TagRouter only works on directories, not individual files."
-            )
-        source_path = matrix_config.source.path
-        exclude_path = matrix_config.exclude.path if matrix_config.exclude else None
+    def __init__(self, matrix_config: MatrixConfig):
+        self.matrix_config = matrix_config
 
-        for i in matrix_config.mp3_files:
+    @property
+    def source(self) -> Generator[File, None, None]:
+        """
+        A property that returns a generator of files that match the tag criteria.
+        This uses the matrix_config to determine the tag and value to search for.
+        No arguments are needed, as the matrix_config is already set in the constructor.
+        """
+        if self.matrix_config.source.is_file:
+            raise ValueError(
+                f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
+            )
+        source_path = self.matrix_config.source.path
+        exclude_path = self.matrix_config.exclude.path if self.matrix_config.exclude else None
+
+        for i in self.matrix_config.mp3_files:
             # Dynamically search for the tag in the MP3 file
             for k, v in i.items():
                 for file_path in search_files(source_path, exclude_path):
