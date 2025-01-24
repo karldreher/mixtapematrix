@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v2.1.0 (2025-01-24)
+
+### Features
+
+- Change flag and minor refactor ([#4](https://github.com/karldreher/mixtapematrix/pull/4),
+  [`1739194`](https://github.com/karldreher/mixtapematrix/commit/17391948ce64f45946e8a2b3084aa6650348d6d9))
+
+- Debug is a flag
+  ([`a696a4f`](https://github.com/karldreher/mixtapematrix/commit/a696a4f2f252de11321ad8f3051ada6c23f8c9d0))
+
+### Refactoring
+
+- Move config_data to cached property
+  ([`68a8811`](https://github.com/karldreher/mixtapematrix/commit/68a88116d027328db67517c80a80a2a8279aa52f))
+
+
 ## v2.0.0 (2025-01-24)
 
 ### Build System
