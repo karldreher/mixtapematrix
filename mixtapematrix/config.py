@@ -35,6 +35,7 @@ class MatrixConfig(BaseModel):
 class ConfigFile(BaseModel):
     matrix: List[MatrixConfig]
 
+
 def create_default_config():
     if Path("matrix.yaml").exists():
         click.echo("Configuration file already exists at matrix.yaml.")

@@ -21,7 +21,9 @@ class TagRouter(FileRouter):
                 f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
             )
         source_path = self.matrix_config.source.path
-        exclude_path = self.matrix_config.exclude.path if self.matrix_config.exclude else None
+        exclude_path = (
+            self.matrix_config.exclude.path if self.matrix_config.exclude else None
+        )
 
         for i in self.matrix_config.mp3_files:
             # Dynamically search for the tag in the MP3 file
