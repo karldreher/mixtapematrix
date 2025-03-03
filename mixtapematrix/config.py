@@ -1,8 +1,9 @@
-from typing import List, Dict, Literal
-from pydantic import BaseModel, computed_field
 from pathlib import Path
+from typing import Dict, List, Literal
+
 import click
-import sys
+from pydantic import BaseModel, computed_field
+
 from .routers.files import File
 
 
@@ -56,4 +57,3 @@ def create_default_config():
 """
         )
     click.echo("Default configuration file created at matrix.yaml")
-    sys.exit(0)
