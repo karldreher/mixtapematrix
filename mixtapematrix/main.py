@@ -1,8 +1,11 @@
-from .routers.mp3_router import TagRouter
-from .config import ConfigFile, create_default_config
+import sys
 from functools import cached_property
-import yaml
+
 import click
+import yaml
+
+from .config import ConfigFile, create_default_config
+from .routers.mp3_router import TagRouter
 
 
 class MixtapeMatrix:
@@ -37,5 +40,6 @@ class MixtapeMatrix:
 def cli(config, create_config, debug):
     if create_config:
         create_default_config()
+        sys.exit(0)
     matrix = MixtapeMatrix(config=config, debug=debug)
     matrix.run()
