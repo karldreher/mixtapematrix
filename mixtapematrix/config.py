@@ -41,6 +41,16 @@ class MatrixConfig(BaseModel):
     mp3_files: List[Dict[Literal["artist", "album", "genre", "album_artist"], str]]
 
 
+class TransformConfig(BaseModel):
+    """
+    TransformConfig represents a list of shell commands to run after files are copied.
+    Each command is a string that will be executed in the shell.
+    This is meant for advanced users who want to run custom commands
+    after the files have been copied according to the matrix configuration.
+    Exercise caution.  
+    """
+    commands: List[str] = []
+
 class ConfigFile(BaseModel):
     matrix: List[MatrixConfig]
 
