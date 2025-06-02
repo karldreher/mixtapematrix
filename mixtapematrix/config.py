@@ -7,9 +7,18 @@ from .routers.files import File
 
 
 class MatrixConfig(BaseModel):
+    """
+    MatrixConfig is the configuration for a single matrix.
+    It contains the source path, exclude path, destination path, and mp3 files to copy.
+    The files are a list of dictionaries, each containing the artist, album, genre, and album_artist.
+    """
     source_path: str
+    """Source path is the directory to copy files from."""
     exclude_path: str = None
+    """Exclude path is the directory to exclude files from copying."""
     destination_path: str
+    """Destination path is the directory to copy files to."""
+
 
     # While the input source_path, destination_.., and exclude_.. are strings,
     # the properties source, destination, and exclude are File objects
