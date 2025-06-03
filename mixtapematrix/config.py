@@ -54,25 +54,30 @@ class TransformConfig(BaseModel):
 class ConfigFile(BaseModel):
     matrix: List[MatrixConfig]
 
-
-def create_default_config():
-    if Path("matrix.yaml").exists():
-        click.echo("Configuration file already exists at matrix.yaml.")
-        sys.exit(1)
-    with open("matrix.yaml", "w") as f:
-        f.write(
-            """matrix:
+    @staticmethod
+    def create_default_config():
+        if Path("matrix.yaml").exists():
+            click.echo("Configuration file already exists at matrix.yaml.")
+            sys.exit(1)
+        with open("matrix.yaml", "w") as f:
+            # Right now, statically defined strings is the best way to do this.
+            # Programatically we might need a different BaseModel.
+            f.write(
+                """matrix:
   - source_path: /path/to/source
-    exclude_path: /path/to/exclude
-    destination_path: /path/to/destination
-    mp3_files:
+      exclude_path: /path/to/exclude
+      destination_path: /path/to/destination
+      mp3_files:
       # All fields are optional.  You can pick and choose which fields to search for.
       # Delete any that are not needed.
       - artist: Artist Name
       - album: Album Name
       - genre: Genre Name
       - album_artist: Album Artist Name
-"""
-        )
-    click.echo("Default configuration file created at matrix.yaml")
-    sys.exit(0)
+# transform: 
+  # Optional transform configuration to run shell commands after copying files.
+  # - ls -la
+    """
+            )
+        click.echo("Default configuration file created at matrix.yaml")
+        sys.exit(0)
