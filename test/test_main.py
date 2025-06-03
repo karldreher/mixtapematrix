@@ -24,7 +24,6 @@ def test_invalid_config():
 
 def test_valid_transform(mkdirs):
         matrix = MixtapeMatrix("test/matrix.yaml")
-        assert matrix.config_data.transform is not None
         assert matrix.config_data.transform.commands == [
             'echo "Files copied successfully"'
         ]
