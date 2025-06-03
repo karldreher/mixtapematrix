@@ -2,11 +2,11 @@ matrix:
   - source_path: test/source
     exclude_path: test/source/exclude
     destination_path: test/output
-    mp3_files: 
+    mp3_files:
       - genre: funk
       - artist: "Fear Factory"
-transform: 
+transform:
   commands:
-    # This is practice.  Don't do this.    
+    # This is practice.  Don't do this.
     - rm -rf test/
     - echo "Files copied successfully"

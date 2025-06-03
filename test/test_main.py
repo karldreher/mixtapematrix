@@ -5,7 +5,6 @@ import pytest
 import yaml
 
 
-
 def test_config(mkdirs):
     matrix = MixtapeMatrix("test/matrix.yaml")
     # This actually gets pretty far, because the ConfigFile model is highly validated.
