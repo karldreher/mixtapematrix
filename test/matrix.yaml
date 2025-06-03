@@ -7,5 +7,4 @@ matrix:
       - artist: "Fear Factory"
 transform: 
   commands:
-      - ls -la
       - echo "Files copied successfully"

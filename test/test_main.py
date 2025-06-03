@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 
+
 def test_config(mkdirs):
     matrix = MixtapeMatrix("test/matrix.yaml")
     # This actually gets pretty far, because the ConfigFile model is highly validated.
@@ -20,6 +21,13 @@ def test_invalid_config():
         with open("test/invalid.yaml", "r") as f:
             # same as above, but more directly catching the error we expect
             matrix = ConfigFile.model_validate(yaml.safe_load(f))
+
+def test_valid_transform(mkdirs):
+        matrix = MixtapeMatrix("test/matrix.yaml")
+        assert matrix.config_data.transform is not None
+        assert matrix.config_data.transform.commands == [
+            'echo "Files copied successfully"'
+        ]
 
 def test_dangerous_transform():
     with pytest.raises(ValueError):
