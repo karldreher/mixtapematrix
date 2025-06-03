@@ -5,3 +5,7 @@ matrix:
     mp3_files: 
       - genre: funk
       - artist: "Fear Factory"
+transform: 
+  commands:
+      - ls -la
+      - echo "Files copied successfully"

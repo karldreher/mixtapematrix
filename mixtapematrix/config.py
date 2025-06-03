@@ -53,7 +53,17 @@ class TransformConfig(BaseModel):
 
 class ConfigFile(BaseModel):
     matrix: List[MatrixConfig]
-
+    """
+    Matrix is a list of MatrixConfig objects, each representing a matrix configuration.
+    This is the main configuration for the mixtape matrix."""
+    transform: TransformConfig = None
+    """
+    Transform is an optional TransformConfig object that contains shell commands to run after copying files.
+    This is useful for advanced users who want to run custom commands after the files have been copied.
+    Exercise caution when using this feature, as it can run arbitrary shell commands.  
+    Anything you can do in a shell, you can do here.
+    Try not to rm -rf yourself.
+    """
     @staticmethod
     def create_default_config():
         if Path("matrix.yaml").exists():
