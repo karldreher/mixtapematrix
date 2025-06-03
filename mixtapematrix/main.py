@@ -1,7 +1,8 @@
 from .routers.mp3_router import TagRouter
-from .config import ConfigFile, create_default_config
+from .config import ConfigFile
 from functools import cached_property
 import yaml
+import subprocess
 import click
 
 
@@ -26,6 +27,10 @@ class MixtapeMatrix:
                 TagRouter.deeply_copy(
                     file, matrix_config.source, matrix_config.destination
                 )
+        for command in self.config_data.transform.commands:
+            self.debug(f"Running command: {command}")
+            subprocess.run(command, shell=True, check=True)
+            self.debug(f"Command executed: {command}")
 
 
 @click.command()
@@ -36,6 +41,6 @@ class MixtapeMatrix:
 @click.option("--debug", help="Enable debug logging", is_flag=True)
 def cli(config, create_config, debug):
     if create_config:
-        create_default_config()
+        ConfigFile.create_default_config()
     matrix = MixtapeMatrix(config=config, debug=debug)
     matrix.run()
