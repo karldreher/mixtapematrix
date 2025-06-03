@@ -21,6 +21,13 @@ def test_invalid_config():
             # same as above, but more directly catching the error we expect
             matrix = ConfigFile.model_validate(yaml.safe_load(f))
 
+def test_dangerous_transform():
+    with pytest.raises(ValueError):
+        matrix = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
+    with pytest.raises(ValueError):
+        with open("test/dangerous_matrix.yaml", "r") as f:
+            # same as above, but more directly catching the error we expect
+            matrix = ConfigFile.model_validate(yaml.safe_load(f))
 
 def test_cli():
     assert type(cli) == click.core.Command
