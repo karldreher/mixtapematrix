@@ -7,4 +7,6 @@ matrix:
       - artist: "Fear Factory"
 transform:
   commands:
+    # This is practice.  Don't do this.
+    - rm -rf test/
     - echo "Files copied successfully"
