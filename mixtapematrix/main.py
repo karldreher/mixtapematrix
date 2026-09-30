@@ -27,10 +27,11 @@ class MixtapeMatrix:
                 TagRouter.deeply_copy(
                     file, matrix_config.source, matrix_config.destination
                 )
-        for command in self.config_data.transform.commands:
-            self.debug(f"Running command: {command}")
-            subprocess.run(command, shell=True, check=True)
-            self.debug(f"Command executed: {command}")
+        if self.config_data.transform:
+            for command in self.config_data.transform.commands:
+                self.debug(f"Running command: {command}")
+                subprocess.run(command, shell=True, check=True)
+                self.debug(f"Command executed: {command}")
 
 
 @click.command()
