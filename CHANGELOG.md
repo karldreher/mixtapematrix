@@ -1,6 +1,49 @@
 # CHANGELOG
 
 
+## v2.2.0 (2026-09-30)
+
+### Bug Fixes
+
+- Upgrade deps
+  ([`950c7de`](https://github.com/karldreher/mixtapematrix/commit/950c7de70f97cb345de0c63f587de3ea8a0efcea))
+
+### Chores
+
+- Format
+  ([`cbdd3a2`](https://github.com/karldreher/mixtapematrix/commit/cbdd3a2370eee514ab791d51431a296d2cfdbac7))
+
+### Documentation
+
+- Add docstrings
+  ([`406b010`](https://github.com/karldreher/mixtapematrix/commit/406b010f28faaeecc6f61e42d0178611e00ab233))
+
+### Features
+
+- Add a transforms config
+  ([`873375f`](https://github.com/karldreher/mixtapematrix/commit/873375f2aaf4c2d38b706f7ed288124efac77e71))
+
+- Add some validation to avoid dangerous subcommands
+  ([`8b598eb`](https://github.com/karldreher/mixtapematrix/commit/8b598eb42d7a364e7f6d5bf168ddfdfecece7841))
+
+- Add transformconfig ([#5](https://github.com/karldreher/mixtapematrix/pull/5),
+  [`7cbbc32`](https://github.com/karldreher/mixtapematrix/commit/7cbbc32911f9d907799768d0290446b072f96acb))
+
+- Clean up default config generator
+  ([`7d966b0`](https://github.com/karldreher/mixtapematrix/commit/7d966b017955af6449e2162e9fa7d359bfa9d7dd))
+
+- Implement transformconfig
+  ([`2895c01`](https://github.com/karldreher/mixtapematrix/commit/2895c01afe522389449cc8f02cfc0e84233fbe0d))
+
+### Testing
+
+- Add tests
+  ([`f96bff9`](https://github.com/karldreher/mixtapematrix/commit/f96bff9e1364ca0b8e6977532eeec29741857459))
+
+- Remove unneeded test
+  ([`fef9234`](https://github.com/karldreher/mixtapematrix/commit/fef923476b05e36b071a24c641db737b11303918))
+
+
 ## v2.1.0 (2025-01-24)
 
 ### Features
