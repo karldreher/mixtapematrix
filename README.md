@@ -23,10 +23,10 @@ File copying gets so boring.  You have to go and *pick* which file you want to c
 
 # Installation and Usage
 
-Pipx is reccomended for install.  
+`uv tool install` is recommended for install.  
 
 ```
-pipx install git+https://github.com/karldreher/mixtapematrix.git
+uv tool install git+https://github.com/karldreher/mixtapematrix.git
 ```
 
 Once installed, you need to generate a *config file*.  
