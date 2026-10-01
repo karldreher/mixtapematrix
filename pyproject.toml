@@ -34,6 +34,18 @@ default-groups = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+extend-exclude = ["test/source", "test/output"]
+
+[tool.ruff.lint]
+# E/F: pycodestyle + pyflakes, I: import sorting, UP: pyupgrade, B: bugbear,
+# SIM: simplify, BLE: blind except, TRY004: prefer TypeError for type checks
+select = ["E", "F", "I", "UP", "B", "SIM", "BLE", "TRY004"]
+# line length is owned by `ruff format`; long strings and comments are left alone
+ignore = ["E501"]
+
 [tool.pytest.ini_options]
 addopts = "-v --cov"
 
