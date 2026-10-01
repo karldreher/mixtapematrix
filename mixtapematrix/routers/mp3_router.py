@@ -74,6 +74,6 @@ class TagRouter(FileRouter):
         # Tag reads are I/O-bound, so overlap them; map() preserves walk order.
         with ThreadPoolExecutor() as pool:
             matches = pool.map(lambda p: _file_matches(p, criteria), mp3_paths)
-            for file_path, matched in zip(mp3_paths, matches):
+            for file_path, matched in zip(mp3_paths, matches, strict=True):
                 if matched:
                     yield File(path=file_path)
