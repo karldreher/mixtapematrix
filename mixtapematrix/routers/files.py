@@ -68,7 +68,10 @@ def search_files(
     If exclude_path is provided, skip any files in that path.
     """
     for root, dirs, files in os.walk(source_path):
-        if exclude_path and exclude_path in root:
-            continue
+        if exclude_path:
+            # Prune in place so os.walk does not descend into excluded subtrees.
+            dirs[:] = [d for d in dirs if exclude_path not in os.path.join(root, d)]
+            if exclude_path in root:
+                continue
         for file in files:
             yield os.path.join(root, file)
