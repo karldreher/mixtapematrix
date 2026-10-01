@@ -61,7 +61,7 @@ class FileRouter(ABC):
 
 
 def search_files(
-    source_path: str, exclude_path: str = None
+    source_path: str, exclude_path: str | None = None
 ) -> Generator[str, None, None]:
     """
     Walk the source path and yield all files.
