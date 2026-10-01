@@ -43,4 +43,4 @@ jobs:
           git config user.email github-actions@github.com
           uv run semantic-release -v version
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
