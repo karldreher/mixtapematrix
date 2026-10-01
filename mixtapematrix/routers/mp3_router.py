@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 
+import eyed3
 from eyed3.id3 import Genre, Tag
 
 from ..config import MatrixConfig
@@ -15,7 +16,7 @@ def _load_tag(path: str) -> Tag | None:
     try:
         tag = Tag()
         return tag if tag.parse(path) else None
-    except Exception as e:
+    except (OSError, ValueError, eyed3.Error) as e:
         print(f"Error loading {path}: {e}")
         return None
 
