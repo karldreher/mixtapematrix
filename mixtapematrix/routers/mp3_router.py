@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from typing import Generator
 from eyed3.id3 import Tag
 
@@ -26,6 +27,12 @@ def _tag_matches(tag: Tag, key: str, value: str) -> bool:
     return str(getattr(tag, key)).lower() == value.lower()
 
 
+def _file_matches(path: str, criteria: list[tuple[str, str]]) -> bool:
+    """True if the MP3 at path matches any criterion. Returns a bool so parsed tags are not retained."""
+    tag = _load_tag(path)
+    return tag is not None and any(_tag_matches(tag, k, v) for k, v in criteria)
+
+
 class TagRouter(FileRouter):
     def __init__(self, matrix_config: MatrixConfig):
         self.matrix_config = matrix_config
@@ -50,11 +57,15 @@ class TagRouter(FileRouter):
             (k, v) for entry in self.matrix_config.mp3_files for k, v in entry.items()
         ]
 
-        for file_path in search_files(source_path, exclude_path):
-            if not file_path.lower().endswith(".mp3"):
-                continue
-            tag = _load_tag(file_path)
-            if tag is None:
-                continue
-            if any(_tag_matches(tag, k, v) for k, v in criteria):
-                yield File(path=file_path)
+        mp3_paths = [
+            p
+            for p in search_files(source_path, exclude_path)
+            if p.lower().endswith(".mp3")
+        ]
+
+        # Tag reads are I/O-bound, so overlap them; map() preserves walk order.
+        with ThreadPoolExecutor() as pool:
+            matches = pool.map(lambda p: _file_matches(p, criteria), mp3_paths)
+            for file_path, matched in zip(mp3_paths, matches):
+                if matched:
+                    yield File(path=file_path)
