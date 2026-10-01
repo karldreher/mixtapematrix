@@ -16,7 +16,7 @@ class MixtapeMatrix:
 
     @cached_property
     def config_data(self) -> ConfigFile:
-        with open(self.config, "r") as f:
+        with open(self.config) as f:
             return ConfigFile.model_validate(yaml.safe_load(f))
 
     def run(self):

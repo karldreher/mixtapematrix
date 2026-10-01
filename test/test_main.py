@@ -18,7 +18,7 @@ def test_invalid_config():
     with pytest.raises(ValueError):
         matrix = MixtapeMatrix("test/invalid.yaml").config_data
     with pytest.raises(ValueError):
-        with open("test/invalid.yaml", "r") as f:
+        with open("test/invalid.yaml") as f:
             # same as above, but more directly catching the error we expect
             matrix = ConfigFile.model_validate(yaml.safe_load(f))
 
@@ -32,7 +32,7 @@ def test_dangerous_transform():
     with pytest.raises(ValueError):
         matrix = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
     with pytest.raises(ValueError):
-        with open("test/dangerous_matrix.yaml", "r") as f:
+        with open("test/dangerous_matrix.yaml") as f:
             # same as above, but more directly catching the error we expect
             matrix = ConfigFile.model_validate(yaml.safe_load(f))
 

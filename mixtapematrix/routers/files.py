@@ -2,7 +2,7 @@ import os
 import shutil
 import sys
 from abc import ABC, abstractmethod
-from typing import Generator
+from collections.abc import Generator
 
 from pydantic import BaseModel, computed_field, field_validator
 
@@ -37,7 +37,7 @@ class File(BaseModel):
 class FileRouter(ABC):
     @property
     @abstractmethod
-    def source(self) -> Generator[File, None, None]:
+    def source(self) -> Generator[File]:
         raise NotImplementedError
 
     @staticmethod
@@ -61,9 +61,7 @@ class FileRouter(ABC):
             sys.exit(1)
 
 
-def search_files(
-    source_path: str, exclude_path: str | None = None
-) -> Generator[str, None, None]:
+def search_files(source_path: str, exclude_path: str | None = None) -> Generator[str]:
     """
     Walk the source path and yield all files.
     If exclude_path is provided, skip any files in that path.

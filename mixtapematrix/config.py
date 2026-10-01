@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Dict, List, Literal
+from typing import Literal
 
 import click
 from pydantic import BaseModel, computed_field, field_validator
@@ -40,7 +40,7 @@ class MatrixConfig(BaseModel):
         return File(path=self.exclude_path) if self.exclude_path else None
 
     # TODO album_artist is probably wrong, check later
-    mp3_files: List[Dict[Literal["artist", "album", "genre", "album_artist"], str]]
+    mp3_files: list[dict[Literal["artist", "album", "genre", "album_artist"], str]]
 
 
 class TransformConfig(BaseModel):
@@ -52,10 +52,10 @@ class TransformConfig(BaseModel):
     Exercise caution.
     """
 
-    commands: List[str] = []
+    commands: list[str] = []
 
     @field_validator("commands")
-    def validate_commands(cls, commands: List[str]):
+    def validate_commands(cls, commands: list[str]):
         # Dangerous commands that should not be allowed.
         # update this list over time with anything that should not be allowed.
         DANGEROUS_COMMANDS = ["rm "]
@@ -70,7 +70,7 @@ class TransformConfig(BaseModel):
 
 
 class ConfigFile(BaseModel):
-    matrix: List[MatrixConfig]
+    matrix: list[MatrixConfig]
     """
     Matrix is a list of MatrixConfig objects, each representing a matrix configuration.
     This is the main configuration for the mixtape matrix."""

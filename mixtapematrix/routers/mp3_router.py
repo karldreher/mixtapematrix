@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from typing import Generator
+from collections.abc import Generator
 
 from eyed3.id3 import Genre, Tag
 
@@ -45,7 +45,7 @@ class TagRouter(FileRouter):
         self.matrix_config = matrix_config
 
     @property
-    def source(self) -> Generator[File, None, None]:
+    def source(self) -> Generator[File]:
         """
         A property that returns a generator of files that match the tag criteria.
         This uses the matrix_config to determine the tag and value to search for.
