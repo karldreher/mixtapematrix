@@ -17,7 +17,7 @@ class MatrixConfig(BaseModel):
 
     source_path: str
     """Source path is the directory to copy files from."""
-    exclude_path: str = None
+    exclude_path: str | None = None
     """Exclude path is the directory to exclude files from copying."""
     destination_path: str
     """Destination path is the directory to copy files to."""
@@ -36,7 +36,7 @@ class MatrixConfig(BaseModel):
 
     @computed_field
     @property
-    def exclude(self) -> File:
+    def exclude(self) -> File | None:
         return File(path=self.exclude_path) if self.exclude_path else None
 
     # TODO album_artist is probably wrong, check later
@@ -74,7 +74,7 @@ class ConfigFile(BaseModel):
     """
     Matrix is a list of MatrixConfig objects, each representing a matrix configuration.
     This is the main configuration for the mixtape matrix."""
-    transform: TransformConfig = None
+    transform: TransformConfig | None = None
     """
     Transform is an optional TransformConfig object that contains shell commands to run after copying files.
     This is useful for advanced users who want to run custom commands after the files have been copied.
