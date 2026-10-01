@@ -5,6 +5,23 @@ from .files import FileRouter, File, search_files
 from ..config import MatrixConfig
 
 
+def _load_mp3(path: str):
+    """Load an MP3 with eyed3, returning None (and reporting) if it cannot be read."""
+    try:
+        return eyed3.load(path=path)
+    except Exception as e:
+        print(f"Error loading {path}: {e}")
+        return None
+
+
+def _tag_matches(audiofile, key: str, value: str) -> bool:
+    """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
+    if key == "genre":
+        # Genre is a special case: the tag is a Genre object, compare by name.
+        return audiofile.tag.genre.name.lower() == value.lower()
+    return str(getattr(audiofile.tag, key)).lower() == value.lower()
+
+
 class TagRouter(FileRouter):
     def __init__(self, matrix_config: MatrixConfig):
         self.matrix_config = matrix_config
@@ -25,23 +42,15 @@ class TagRouter(FileRouter):
             self.matrix_config.exclude.path if self.matrix_config.exclude else None
         )
 
-        for i in self.matrix_config.mp3_files:
-            # Dynamically search for the tag in the MP3 file
-            for k, v in i.items():
-                for file_path in search_files(source_path, exclude_path):
-                    if file_path.endswith(".mp3"):
-                        try:
-                            audiofile = eyed3.load(path=file_path)
-                        except Exception as e:
-                            print(f"Error loading {file_path}: {e}")
-                            continue
-                        if k == "genre":
-                            # Genre is a special case
-                            # We most likely want to support just a few select tags, but genre should be one
-                            if audiofile.tag.genre.name.lower() == v.lower():
-                                yield File(path=file_path)
+        criteria = [
+            (k, v) for entry in self.matrix_config.mp3_files for k, v in entry.items()
+        ]
 
-                        # All other tags, but primarily geared toward artist / album
-                        audiofile_tag = getattr(audiofile.tag, k)
-                        if str(audiofile_tag).lower() == v.lower():
-                            yield File(path=file_path)
+        for file_path in search_files(source_path, exclude_path):
+            if not file_path.endswith(".mp3"):
+                continue
+            audiofile = _load_mp3(file_path)
+            if audiofile is None:
+                continue
+            if any(_tag_matches(audiofile, k, v) for k, v in criteria):
+                yield File(path=file_path)
