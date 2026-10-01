@@ -51,7 +51,7 @@ class TagRouter(FileRouter):
         ]
 
         for file_path in search_files(source_path, exclude_path):
-            if not file_path.endswith(".mp3"):
+            if not file_path.lower().endswith(".mp3"):
                 continue
             tag = _load_tag(file_path)
             if tag is None:
