@@ -1,5 +1,5 @@
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 
 from eyed3.id3 import Genre, Tag
 
