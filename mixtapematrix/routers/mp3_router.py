@@ -1,25 +1,29 @@
 from typing import Generator
-import eyed3
+from eyed3.id3 import Tag
 
 from .files import FileRouter, File, search_files
 from ..config import MatrixConfig
 
 
-def _load_mp3(path: str):
-    """Load an MP3 with eyed3, returning None (and reporting) if it cannot be read."""
+def _load_tag(path: str) -> Tag | None:
+    """
+    Read only the ID3 tag of an MP3, skipping audio stream parsing.
+    Returns None (and reports) if the file cannot be read or has no tag.
+    """
     try:
-        return eyed3.load(path=path)
+        tag = Tag()
+        return tag if tag.parse(path) else None
     except Exception as e:
         print(f"Error loading {path}: {e}")
         return None
 
 
-def _tag_matches(audiofile, key: str, value: str) -> bool:
+def _tag_matches(tag: Tag, key: str, value: str) -> bool:
     """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
     if key == "genre":
-        # Genre is a special case: the tag is a Genre object, compare by name.
-        return audiofile.tag.genre.name.lower() == value.lower()
-    return str(getattr(audiofile.tag, key)).lower() == value.lower()
+        # Genre is a special case: the tag is a Genre object (or None), compare by name.
+        return tag.genre is not None and tag.genre.name.lower() == value.lower()
+    return str(getattr(tag, key)).lower() == value.lower()
 
 
 class TagRouter(FileRouter):
@@ -49,8 +53,8 @@ class TagRouter(FileRouter):
         for file_path in search_files(source_path, exclude_path):
             if not file_path.endswith(".mp3"):
                 continue
-            audiofile = _load_mp3(file_path)
-            if audiofile is None:
+            tag = _load_tag(file_path)
+            if tag is None:
                 continue
-            if any(_tag_matches(audiofile, k, v) for k, v in criteria):
+            if any(_tag_matches(tag, k, v) for k, v in criteria):
                 yield File(path=file_path)
