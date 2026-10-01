@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v2.2.2 (2026-10-01)
+
+### Bug Fixes
+
+- Use github token for semantic release
+  ([`b064bfd`](https://github.com/karldreher/mixtapematrix/commit/b064bfdcc86d28b03e19924291fa1c5b23ab2545))
+
+### Continuous Integration
+
+- Add lint and release preview checks
+  ([`4c071c9`](https://github.com/karldreher/mixtapematrix/commit/4c071c9c6b96f761d5c15da80a920ef2d75bd59e))
+
+
 ## v2.2.1 (2026-10-01)
 
 ### Continuous Integration
