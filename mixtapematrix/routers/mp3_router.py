@@ -1,9 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor
 from typing import Generator
+
 from eyed3.id3 import Genre, Tag
 
-from .files import FileRouter, File, search_files
 from ..config import MatrixConfig
+from .files import File, FileRouter, search_files
 
 
 def _load_tag(path: str) -> Tag | None:

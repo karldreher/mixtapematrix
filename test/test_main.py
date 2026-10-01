@@ -1,8 +1,9 @@
-from mixtapematrix.main import MixtapeMatrix, cli
-from mixtapematrix.config import ConfigFile
 import click
 import pytest
 import yaml
+
+from mixtapematrix.config import ConfigFile
+from mixtapematrix.main import MixtapeMatrix, cli
 
 
 def test_config(mkdirs):

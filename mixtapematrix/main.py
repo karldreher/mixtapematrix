@@ -1,9 +1,11 @@
-from .routers.mp3_router import TagRouter
-from .config import ConfigFile
-from functools import cached_property
-import yaml
 import subprocess
+from functools import cached_property
+
 import click
+import yaml
+
+from .config import ConfigFile
+from .routers.mp3_router import TagRouter
 
 
 class MixtapeMatrix:

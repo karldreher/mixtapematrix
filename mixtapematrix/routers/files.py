@@ -1,9 +1,10 @@
 import os
+import shutil
 import sys
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, field_validator, computed_field
-import shutil
 from typing import Generator
+
+from pydantic import BaseModel, computed_field, field_validator
 
 
 class File(BaseModel):
