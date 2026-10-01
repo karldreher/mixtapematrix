@@ -56,7 +56,7 @@ class FileRouter(ABC):
                     shutil.copytree(source.path, destination_file)
                 elif source.is_file:
                     shutil.copyfile(source.path, destination_file)
-        except Exception as e:
+        except OSError as e:
             print(f"Error copying {source.path} to {destination_file}: {e}")
             sys.exit(1)
 
