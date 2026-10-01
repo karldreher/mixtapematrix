@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from typing import Generator
-from eyed3.id3 import Tag
+from eyed3.id3 import Genre, Tag
 
 from .files import FileRouter, File, search_files
 from ..config import MatrixConfig
@@ -23,7 +23,13 @@ def _tag_matches(tag: Tag, key: str, value: str) -> bool:
     """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
     if key == "genre":
         # Genre is a special case: the tag is a Genre object (or None), compare by name.
-        return tag.genre is not None and tag.genre.name.lower() == value.lower()
+        # isinstance narrows the type: eyed3's setter accepts ints, the getter returns Genre | None.
+        genre = tag.genre
+        return (
+            isinstance(genre, Genre)
+            and genre.name is not None
+            and genre.name.lower() == value.lower()
+        )
     return str(getattr(tag, key)).lower() == value.lower()
 
 
