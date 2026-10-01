@@ -12,13 +12,13 @@ class MatrixConfig(BaseModel):
     It contains the source path, exclude path, destination path, and mp3 files to copy.
     The files are a list of dictionaries, each containing the artist, album, genre, and album_artist.
     """
+
     source_path: str
     """Source path is the directory to copy files from."""
     exclude_path: str = None
     """Exclude path is the directory to exclude files from copying."""
     destination_path: str
     """Destination path is the directory to copy files to."""
-
 
     # While the input source_path, destination_.., and exclude_.. are strings,
     # the properties source, destination, and exclude are File objects
@@ -47,9 +47,11 @@ class TransformConfig(BaseModel):
     Each command is a string that will be executed in the shell.
     This is meant for advanced users who want to run custom commands
     after the files have been copied according to the matrix configuration.
-    Exercise caution.  
+    Exercise caution.
     """
+
     commands: List[str] = []
+
     @field_validator("commands")
     def validate_commands(cls, commands: List[str]):
         # Dangerous commands that should not be allowed.
@@ -64,6 +66,7 @@ class TransformConfig(BaseModel):
                 )
         return commands
 
+
 class ConfigFile(BaseModel):
     matrix: List[MatrixConfig]
     """
@@ -77,6 +80,7 @@ class ConfigFile(BaseModel):
     Anything you can do in a shell, you can do here.
     Try not to rm -rf yourself.
     """
+
     @staticmethod
     def create_default_config():
         if Path("matrix.yaml").exists():

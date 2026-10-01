@@ -24,7 +24,7 @@ class File(BaseModel):
     @classmethod
     def validate_path(cls, path):
         if path.startswith("/example/"):
-            # This is used when creating default configs.  
+            # This is used when creating default configs.
             return path
         if not os.path.exists(path):
             # TODO Valid behavior, but needs nicer looking error, just a exit 1 would do.  No stacktrace needed.
