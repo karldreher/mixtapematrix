@@ -60,8 +60,6 @@ class TransformConfig(BaseModel):
         # update this list over time with anything that should not be allowed.
         DANGEROUS_COMMANDS = ["rm "]
         for command in commands:
-            if not isinstance(command, str):
-                raise ValueError("Each command must be a string.")
             if any(dangerous in command for dangerous in DANGEROUS_COMMANDS):
                 raise ValueError(
                     f"Command '{command}' is considered dangerous and is not allowed."
