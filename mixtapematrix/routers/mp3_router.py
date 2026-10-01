@@ -1,8 +1,36 @@
+from concurrent.futures import ThreadPoolExecutor
 from typing import Generator
-import eyed3
+from eyed3.id3 import Tag
 
 from .files import FileRouter, File, search_files
 from ..config import MatrixConfig
+
+
+def _load_tag(path: str) -> Tag | None:
+    """
+    Read only the ID3 tag of an MP3, skipping audio stream parsing.
+    Returns None (and reports) if the file cannot be read or has no tag.
+    """
+    try:
+        tag = Tag()
+        return tag if tag.parse(path) else None
+    except Exception as e:
+        print(f"Error loading {path}: {e}")
+        return None
+
+
+def _tag_matches(tag: Tag, key: str, value: str) -> bool:
+    """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
+    if key == "genre":
+        # Genre is a special case: the tag is a Genre object (or None), compare by name.
+        return tag.genre is not None and tag.genre.name.lower() == value.lower()
+    return str(getattr(tag, key)).lower() == value.lower()
+
+
+def _file_matches(path: str, criteria: list[tuple[str, str]]) -> bool:
+    """True if the MP3 at path matches any criterion. Returns a bool so parsed tags are not retained."""
+    tag = _load_tag(path)
+    return tag is not None and any(_tag_matches(tag, k, v) for k, v in criteria)
 
 
 class TagRouter(FileRouter):
@@ -25,23 +53,19 @@ class TagRouter(FileRouter):
             self.matrix_config.exclude.path if self.matrix_config.exclude else None
         )
 
-        for i in self.matrix_config.mp3_files:
-            # Dynamically search for the tag in the MP3 file
-            for k, v in i.items():
-                for file_path in search_files(source_path, exclude_path):
-                    if file_path.endswith(".mp3"):
-                        try:
-                            audiofile = eyed3.load(path=file_path)
-                        except Exception as e:
-                            print(f"Error loading {file_path}: {e}")
-                            continue
-                        if k == "genre":
-                            # Genre is a special case
-                            # We most likely want to support just a few select tags, but genre should be one
-                            if audiofile.tag.genre.name.lower() == v.lower():
-                                yield File(path=file_path)
+        criteria = [
+            (k, v) for entry in self.matrix_config.mp3_files for k, v in entry.items()
+        ]
 
-                        # All other tags, but primarily geared toward artist / album
-                        audiofile_tag = getattr(audiofile.tag, k)
-                        if str(audiofile_tag).lower() == v.lower():
-                            yield File(path=file_path)
+        mp3_paths = [
+            p
+            for p in search_files(source_path, exclude_path)
+            if p.lower().endswith(".mp3")
+        ]
+
+        # Tag reads are I/O-bound, so overlap them; map() preserves walk order.
+        with ThreadPoolExecutor() as pool:
+            matches = pool.map(lambda p: _file_matches(p, criteria), mp3_paths)
+            for file_path, matched in zip(mp3_paths, matches):
+                if matched:
+                    yield File(path=file_path)
