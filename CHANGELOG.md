@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v2.2.1 (2026-10-01)
+
+### Continuous Integration
+
+- Update workflows ([#6](https://github.com/karldreher/mixtapematrix/pull/6),
+  [`b852bf4`](https://github.com/karldreher/mixtapematrix/commit/b852bf46ac3f79f3844c62529ab4d543badde042))
+
+### Documentation
+
+- Update install guidance ([#7](https://github.com/karldreher/mixtapematrix/pull/7),
+  [`1bc4837`](https://github.com/karldreher/mixtapematrix/commit/1bc4837e3cc4de0b0cebf9c6ff7bb6a09d4af26d))
+
+### Performance Improvements
+
+- Speed up tag matching and add ruff config
+  ([#9](https://github.com/karldreher/mixtapematrix/pull/9),
+  [`c0fcdd4`](https://github.com/karldreher/mixtapematrix/commit/c0fcdd4e331429ec50962e160b826858771deffb))
+
+### Refactoring
+
+- Flatten tagrouter.source ([#8](https://github.com/karldreher/mixtapematrix/pull/8),
+  [`4943328`](https://github.com/karldreher/mixtapematrix/commit/4943328175060caa6f6c8247dad92361a7d30753))
+
+
 ## v2.2.0 (2026-09-30)
 
 ### Bug Fixes
