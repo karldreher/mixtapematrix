@@ -1,9 +1,10 @@
 import os
+import shutil
 import sys
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, field_validator, computed_field
-import shutil
-from typing import Generator
+from collections.abc import Generator
+
+from pydantic import BaseModel, computed_field, field_validator
 
 
 class File(BaseModel):
@@ -24,7 +25,7 @@ class File(BaseModel):
     @classmethod
     def validate_path(cls, path):
         if path.startswith("/example/"):
-            # This is used when creating default configs.  
+            # This is used when creating default configs.
             return path
         if not os.path.exists(path):
             # TODO Valid behavior, but needs nicer looking error, just a exit 1 would do.  No stacktrace needed.
@@ -36,7 +37,7 @@ class File(BaseModel):
 class FileRouter(ABC):
     @property
     @abstractmethod
-    def source(self) -> Generator[File, None, None]:
+    def source(self) -> Generator[File]:
         raise NotImplementedError
 
     @staticmethod
@@ -55,14 +56,12 @@ class FileRouter(ABC):
                     shutil.copytree(source.path, destination_file)
                 elif source.is_file:
                     shutil.copyfile(source.path, destination_file)
-        except Exception as e:
+        except OSError as e:
             print(f"Error copying {source.path} to {destination_file}: {e}")
             sys.exit(1)
 
 
-def search_files(
-    source_path: str, exclude_path: str | None = None
-) -> Generator[str, None, None]:
+def search_files(source_path: str, exclude_path: str | None = None) -> Generator[str]:
     """
     Walk the source path and yield all files.
     If exclude_path is provided, skip any files in that path.

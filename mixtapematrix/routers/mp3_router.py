@@ -1,9 +1,11 @@
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from typing import Generator
-from eyed3.id3 import Tag
 
-from .files import FileRouter, File, search_files
+import eyed3
+from eyed3.id3 import Genre, Tag
+
 from ..config import MatrixConfig
+from .files import File, FileRouter, search_files
 
 
 def _load_tag(path: str) -> Tag | None:
@@ -14,7 +16,7 @@ def _load_tag(path: str) -> Tag | None:
     try:
         tag = Tag()
         return tag if tag.parse(path) else None
-    except Exception as e:
+    except (OSError, ValueError, eyed3.Error) as e:
         print(f"Error loading {path}: {e}")
         return None
 
@@ -23,7 +25,13 @@ def _tag_matches(tag: Tag, key: str, value: str) -> bool:
     """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
     if key == "genre":
         # Genre is a special case: the tag is a Genre object (or None), compare by name.
-        return tag.genre is not None and tag.genre.name.lower() == value.lower()
+        # isinstance narrows the type: eyed3's setter accepts ints, the getter returns Genre | None.
+        genre = tag.genre
+        return (
+            isinstance(genre, Genre)
+            and genre.name is not None
+            and genre.name.lower() == value.lower()
+        )
     return str(getattr(tag, key)).lower() == value.lower()
 
 
@@ -38,7 +46,7 @@ class TagRouter(FileRouter):
         self.matrix_config = matrix_config
 
     @property
-    def source(self) -> Generator[File, None, None]:
+    def source(self) -> Generator[File]:
         """
         A property that returns a generator of files that match the tag criteria.
         This uses the matrix_config to determine the tag and value to search for.
@@ -66,6 +74,6 @@ class TagRouter(FileRouter):
         # Tag reads are I/O-bound, so overlap them; map() preserves walk order.
         with ThreadPoolExecutor() as pool:
             matches = pool.map(lambda p: _file_matches(p, criteria), mp3_paths)
-            for file_path, matched in zip(mp3_paths, matches):
+            for file_path, matched in zip(mp3_paths, matches, strict=True):
                 if matched:
                     yield File(path=file_path)

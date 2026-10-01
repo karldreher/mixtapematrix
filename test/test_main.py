@@ -1,8 +1,9 @@
-from mixtapematrix.main import MixtapeMatrix, cli
-from mixtapematrix.config import ConfigFile
 import click
 import pytest
 import yaml
+
+from mixtapematrix.config import ConfigFile
+from mixtapematrix.main import MixtapeMatrix, cli
 
 
 def test_config(mkdirs):
@@ -15,25 +16,24 @@ def test_config(mkdirs):
 
 def test_invalid_config():
     with pytest.raises(ValueError):
-        matrix = MixtapeMatrix("test/invalid.yaml").config_data
-    with pytest.raises(ValueError):
-        with open("test/invalid.yaml", "r") as f:
-            # same as above, but more directly catching the error we expect
-            matrix = ConfigFile.model_validate(yaml.safe_load(f))
+        _ = MixtapeMatrix("test/invalid.yaml").config_data
+    with pytest.raises(ValueError), open("test/invalid.yaml") as f:
+        # same as above, but more directly catching the error we expect
+        ConfigFile.model_validate(yaml.safe_load(f))
+
 
 def test_valid_transform(mkdirs):
-        matrix = MixtapeMatrix("test/matrix.yaml")
-        assert matrix.config_data.transform.commands == [
-            'echo "Files copied successfully"'
-        ]
+    matrix = MixtapeMatrix("test/matrix.yaml")
+    assert matrix.config_data.transform.commands == ['echo "Files copied successfully"']
+
 
 def test_dangerous_transform():
     with pytest.raises(ValueError):
-        matrix = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
-    with pytest.raises(ValueError):
-        with open("test/dangerous_matrix.yaml", "r") as f:
-            # same as above, but more directly catching the error we expect
-            matrix = ConfigFile.model_validate(yaml.safe_load(f))
+        _ = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
+    with pytest.raises(ValueError), open("test/dangerous_matrix.yaml") as f:
+        # same as above, but more directly catching the error we expect
+        ConfigFile.model_validate(yaml.safe_load(f))
+
 
 def test_cli():
-    assert type(cli) == click.core.Command
+    assert isinstance(cli, click.Command)

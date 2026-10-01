@@ -1,9 +1,11 @@
-from .routers.mp3_router import TagRouter
-from .config import ConfigFile
-from functools import cached_property
-import yaml
 import subprocess
+from functools import cached_property
+
 import click
+import yaml
+
+from .config import ConfigFile
+from .routers.mp3_router import TagRouter
 
 
 class MixtapeMatrix:
@@ -14,7 +16,7 @@ class MixtapeMatrix:
 
     @cached_property
     def config_data(self) -> ConfigFile:
-        with open(self.config, "r") as f:
+        with open(self.config) as f:
             return ConfigFile.model_validate(yaml.safe_load(f))
 
     def run(self):

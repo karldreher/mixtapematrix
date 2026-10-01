@@ -1,8 +1,10 @@
-from typing import List, Dict, Literal
-from pydantic import BaseModel, computed_field, field_validator
-from pathlib import Path
-import click
 import sys
+from pathlib import Path
+from typing import Literal
+
+import click
+from pydantic import BaseModel, computed_field, field_validator
+
 from .routers.files import File
 
 
@@ -12,13 +14,13 @@ class MatrixConfig(BaseModel):
     It contains the source path, exclude path, destination path, and mp3 files to copy.
     The files are a list of dictionaries, each containing the artist, album, genre, and album_artist.
     """
+
     source_path: str
     """Source path is the directory to copy files from."""
-    exclude_path: str = None
+    exclude_path: str | None = None
     """Exclude path is the directory to exclude files from copying."""
     destination_path: str
     """Destination path is the directory to copy files to."""
-
 
     # While the input source_path, destination_.., and exclude_.. are strings,
     # the properties source, destination, and exclude are File objects
@@ -34,11 +36,11 @@ class MatrixConfig(BaseModel):
 
     @computed_field
     @property
-    def exclude(self) -> File:
+    def exclude(self) -> File | None:
         return File(path=self.exclude_path) if self.exclude_path else None
 
     # TODO album_artist is probably wrong, check later
-    mp3_files: List[Dict[Literal["artist", "album", "genre", "album_artist"], str]]
+    mp3_files: list[dict[Literal["artist", "album", "genre", "album_artist"], str]]
 
 
 class TransformConfig(BaseModel):
@@ -47,29 +49,30 @@ class TransformConfig(BaseModel):
     Each command is a string that will be executed in the shell.
     This is meant for advanced users who want to run custom commands
     after the files have been copied according to the matrix configuration.
-    Exercise caution.  
+    Exercise caution.
     """
-    commands: List[str] = []
+
+    commands: list[str] = []
+
     @field_validator("commands")
-    def validate_commands(cls, commands: List[str]):
+    def validate_commands(cls, commands: list[str]):
         # Dangerous commands that should not be allowed.
         # update this list over time with anything that should not be allowed.
         DANGEROUS_COMMANDS = ["rm "]
         for command in commands:
-            if not isinstance(command, str):
-                raise ValueError("Each command must be a string.")
             if any(dangerous in command for dangerous in DANGEROUS_COMMANDS):
                 raise ValueError(
                     f"Command '{command}' is considered dangerous and is not allowed."
                 )
         return commands
 
+
 class ConfigFile(BaseModel):
-    matrix: List[MatrixConfig]
+    matrix: list[MatrixConfig]
     """
     Matrix is a list of MatrixConfig objects, each representing a matrix configuration.
     This is the main configuration for the mixtape matrix."""
-    transform: TransformConfig = None
+    transform: TransformConfig | None = None
     """
     Transform is an optional TransformConfig object that contains shell commands to run after copying files.
     This is useful for advanced users who want to run custom commands after the files have been copied.
@@ -77,6 +80,7 @@ class ConfigFile(BaseModel):
     Anything you can do in a shell, you can do here.
     Try not to rm -rf yourself.
     """
+
     @staticmethod
     def create_default_config():
         if Path("matrix.yaml").exists():
