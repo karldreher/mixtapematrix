@@ -36,14 +36,24 @@ class MixtapeMatrix:
                 self.debug(f"Command executed: {command}")
 
 
-@click.command()
+@click.group(invoke_without_command=True)
+@click.pass_context
+def cli(ctx):
+    """Copy and transform music files according to a matrix YAML config."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit(1)
+
+
+@cli.command()
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
-@click.option(
-    "--create-config", help="Create a default configuration file", is_flag=True
-)
 @click.option("--debug", help="Enable debug logging", is_flag=True)
-def cli(config, create_config, debug):
-    if create_config:
-        ConfigFile.create_default_config()
-    matrix = MixtapeMatrix(config=config, debug=debug)
-    matrix.run()
+def run(config, debug):
+    """Run the matrix described by a configuration file."""
+    MixtapeMatrix(config=config, debug=debug).run()
+
+
+@cli.command()
+def init():
+    """Create a default matrix.yaml in the current directory."""
+    ConfigFile.create_default_config()
