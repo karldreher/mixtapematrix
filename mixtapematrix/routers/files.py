@@ -42,7 +42,7 @@ class FileRouter(ABC):
 
     @staticmethod
     def deeply_copy(source: File, root_source: File, destination: File) -> None:
-        destination_file = source.path.replace(root_source.path, destination.path)
+        destination_file = destination_path(source, root_source, destination)
         try:
             if os.path.exists(destination_file):
                 # Do nothing, we already copied this file
@@ -59,6 +59,42 @@ class FileRouter(ABC):
         except OSError as e:
             print(f"Error copying {source.path} to {destination_file}: {e}")
             sys.exit(1)
+
+
+def destination_path(source: File, root_source: File, destination: File) -> str:
+    """Where deeply_copy places a source file inside the destination."""
+    return source.path.replace(root_source.path, destination.path)
+
+
+def paths_overlap(a: str, b: str) -> bool:
+    """True when either directory is the same as, or inside, the other."""
+    a, b = os.path.realpath(a), os.path.realpath(b)
+    return os.path.commonpath([a, b]) in (a, b)
+
+
+def prune_destination(root: str, keep: set[str]) -> list[str]:
+    """
+    Delete everything under root that is not in keep, then remove directories left
+    empty. root itself is never removed. Returns the deleted paths (empty
+    directories included).
+    """
+    removed: list[str] = []
+    try:
+        for current, dirs, files in os.walk(root, topdown=False):
+            # Symlinks to directories are listed in dirs but never descended into.
+            links = [d for d in dirs if os.path.islink(os.path.join(current, d))]
+            for name in files + links:
+                path = os.path.join(current, name)
+                if path not in keep:
+                    os.remove(path)
+                    removed.append(path)
+            if current != root and not os.listdir(current):
+                os.rmdir(current)
+                removed.append(current)
+    except OSError as e:
+        print(f"Error pruning {root}: {e}")
+        sys.exit(1)
+    return removed
 
 
 def search_files(source_path: str, exclude_path: str | None = None) -> Generator[str]:

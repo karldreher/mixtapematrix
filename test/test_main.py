@@ -247,3 +247,64 @@ def test_cache_clean_with_no_cache_directory(tmp_path):
     result = CliRunner().invoke(cli, ["cache", "clean", "--all"])
     assert result.exit_code == 0
     assert "Removed 0 cache file(s)" in result.output
+
+
+def prune_config(tmp_path, destinations=None):
+    """write_cache_config plus stale files in the destination."""
+    config = write_cache_config(tmp_path)
+    out = tmp_path / "out"
+    (out / "old").mkdir()
+    (out / "old" / "gone.mp3").touch()
+    (out / "notes.txt").touch()
+    return config, out
+
+
+def test_run_without_prune_keeps_extra_files(tmp_path):
+    config, out = prune_config(tmp_path)
+    assert CliRunner().invoke(cli, ["run", "--config", str(config)]).exit_code == 0
+    assert (out / "song.mp3").exists()
+    assert (out / "notes.txt").exists()
+    assert (out / "old" / "gone.mp3").exists()
+
+
+def test_run_prune_deletes_unmatched_files_and_empty_dirs(tmp_path):
+    config, out = prune_config(tmp_path)
+    result = CliRunner().invoke(cli, ["run", "--config", str(config), "--prune"])
+    assert result.exit_code == 0, result.output
+    assert sorted(p.name for p in out.rglob("*")) == ["song.mp3"]
+    assert "Pruned" in result.output
+
+
+def test_run_prune_shared_destination_keeps_all_matrix_output(tmp_path):
+    config, out = prune_config(tmp_path)
+    data = yaml.safe_load(config.read_text())
+    second = tmp_path / "library2"
+    second.mkdir()
+    from eyed3.id3 import Tag
+
+    (second / "other.mp3").touch()
+    tag = Tag()
+    tag.artist = "Beta"
+    tag.save(str(second / "other.mp3"))
+    data["matrix"].append(
+        {
+            "source_path": str(second),
+            "destination_path": str(out),
+            "mp3_files": [{"artist": "Beta"}],
+        }
+    )
+    config.write_text(yaml.safe_dump(data))
+    result = CliRunner().invoke(cli, ["run", "--config", str(config), "--prune"])
+    assert result.exit_code == 0, result.output
+    assert sorted(p.name for p in out.iterdir()) == ["other.mp3", "song.mp3"]
+
+
+def test_run_prune_refuses_destination_overlapping_source(tmp_path):
+    config, _ = prune_config(tmp_path)
+    data = yaml.safe_load(config.read_text())
+    data["matrix"][0]["destination_path"] = data["matrix"][0]["source_path"]
+    config.write_text(yaml.safe_dump(data))
+    result = CliRunner().invoke(cli, ["run", "--config", str(config), "--prune"])
+    assert result.exit_code != 0
+    assert "overlaps" in result.output
+    assert (tmp_path / "library" / "song.mp3").exists()

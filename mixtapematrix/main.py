@@ -7,6 +7,7 @@ import yaml
 from .cache import TagCache, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
+from .routers.files import destination_path, paths_overlap, prune_destination
 from .routers.mp3_router import TagRouter
 
 
@@ -18,9 +19,16 @@ def _format_bytes(size: float) -> str:
 
 
 class MixtapeMatrix:
-    def __init__(self, config: str, debug: bool = False, use_cache: bool = True):
+    def __init__(
+        self,
+        config: str,
+        debug: bool = False,
+        use_cache: bool = True,
+        prune: bool = False,
+    ):
         self.config = config
         self.use_cache = use_cache
+        self.prune = prune
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
 
@@ -42,9 +50,26 @@ class MixtapeMatrix:
             debug=self.debug,
         )
 
+    def _check_prune_safe(self):
+        """Pruning deletes from the destination, so it must not overlap a source."""
+        for matrix_config in self.config_data.matrix:
+            destination = matrix_config.destination.path
+            for other in self.config_data.matrix:
+                if paths_overlap(destination, other.source.path):
+                    raise click.ClickException(
+                        f"Refusing to prune: destination {destination} overlaps "
+                        f"source {other.source.path}."
+                    )
+
     def run(self):
+        if self.prune:
+            self._check_prune_safe()
+        # Destinations can be shared between matrices, so pruning waits until
+        # every matrix has copied: a file is kept if any matrix put it there.
+        keep: dict[str, set[str]] = {}
         for matrix_config in self.config_data.matrix:
             router = TagRouter(matrix_config, cache=self.tag_cache(matrix_config))
+            kept = keep.setdefault(matrix_config.destination.path, set())
             for file in router.source:
                 self.debug(f"Copying {file.path} to {matrix_config.destination.path}")
                 # TODO: not terribly optimized and could be invalid based on
@@ -52,6 +77,15 @@ class MixtapeMatrix:
                 TagRouter.deeply_copy(
                     file, matrix_config.source, matrix_config.destination
                 )
+                kept.add(
+                    destination_path(
+                        file, matrix_config.source, matrix_config.destination
+                    )
+                )
+        if self.prune:
+            for root, kept in keep.items():
+                for path in prune_destination(root, kept):
+                    self.logger(f"Pruned {path}")
         if self.config_data.transform:
             for command in self.config_data.transform.commands:
                 self.debug(f"Running command: {command}")
@@ -78,9 +112,14 @@ def cli(ctx):
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
 @click.option("--debug", help="Enable debug logging", is_flag=True)
 @click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
-def run(config, debug, no_cache):
+@click.option(
+    "--prune",
+    is_flag=True,
+    help="Delete destination files that no matrix copied (off by default)",
+)
+def run(config, debug, no_cache, prune):
     """Run the matrix described by a configuration file."""
-    MixtapeMatrix(config=config, debug=debug, use_cache=not no_cache).run()
+    MixtapeMatrix(config=config, debug=debug, use_cache=not no_cache, prune=prune).run()
 
 
 @cli.command()
