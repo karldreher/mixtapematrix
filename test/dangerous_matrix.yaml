@@ -1,6 +1,7 @@
 matrix:
   - source_path: test/source
-    exclude_path: test/source/exclude
+    exclude_paths:
+      - test/source/exclude
     destination_path: test/output
     mp3_files:
       - genre: funk

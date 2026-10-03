@@ -35,17 +35,39 @@ Once installed, you need to generate a *config file*.
 matrix:
   # absolute paths always appreciated, relative paths supported
   - source_path: ./my-music
-    # don't copy the Huey Luis folder
-    exclude_path: "./my-music/Huey Luis"
+    # don't copy these folders (or files)
+    exclude_paths:
+      - ./my-music/Podcasts
+      - "./my-music/Huey Luis"
     destination_path: /example/destination/path
     mp3_files: 
+      # all funk, except tracks by one artist or from one album
       - genre: funk
+        exclude:
+          artist: Artist B
+          album: Album Name 2
       - artist: "Fear Factory"
 ```
 
 You can create a default config file with `mixtape init`.  This also writes `matrix.schema.json` next to it, and the config references it with a `# yaml-language-server: $schema=./matrix.schema.json` comment.  With the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, VS Code then highlights errors and offers completions and type hints for the config.  Pass `--no-json-schema` to skip the schema file and the comment, and `--force` to overwrite an existing `matrix.yaml`.
 
 Based on the config file, Mixtape Matrix will find any files in `source_path`, which match the directives in `mp3_files`.  If you want to keep funk and Fear Factory in your mixtape, the config file above is half-done for you!
+
+## Excluding files
+
+Two options leave files out, and they work at different levels:
+
+- `exclude_paths` (per matrix) works on **locations**. Each entry is a directory or file, and everything beneath it is skipped without being read. A plain entry matches whole path components, so `rock` never excludes `Crockett`, and relative paths work however `source_path` is written. Plain entries must exist. An entry may end in `**` to match by prefix: `/music/rock**` skips everything whose path starts with `/music/rock` (including `rockabilly`), and `/music/rock/**` skips everything beneath `/music/rock`. `**` is only supported at the end of an entry, and glob entries need not exist.
+- `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists.
+
+Excludes are applied in order, path first and then tag:
+
+1. **Path:** a file under an `exclude_paths` entry is dropped for the whole matrix. No `mp3_files` entry can bring it back, whatever its tags say. Use this to keep something out for good, such as a `Huey Luis` folder whose tracks would otherwise be caught by `genre: pop`.
+2. **Tag:** each remaining file is tested against every `mp3_files` entry. An entry or `exclude:` block matches when **any** tag it lists matches (case-insensitive). An entry's `exclude:` only carves exceptions out of that entry, so one entry's exception never removes a file another entry matches.
+
+A file is copied when it matches at least one entry and no exclude applies (by path or by tag). An entry needs at least one tag of its own, so "everything except X" is not supported.
+
+`exclude:` is applied to cached tags, so adding or changing one never invalidates the tag cache.
 
 ## Run the tool
 

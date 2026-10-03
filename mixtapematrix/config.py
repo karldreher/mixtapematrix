@@ -1,13 +1,21 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
 from .cache import TTL_PATTERN, parse_ttl
-from .routers.files import File
+from .routers.files import GLOB_TAIL, File, is_glob
 
 CONFIG_FILENAME = "matrix.yaml"
 SCHEMA_FILENAME = "matrix.schema.json"
@@ -16,7 +24,10 @@ _STRICT = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
 
 class Mp3Match(BaseModel):
-    """A set of ID3 tags to match. A file is copied when any listed tag matches."""
+    """
+    A set of ID3 tags to match. A file is copied when any listed tag matches,
+    unless its exclude block matches.
+    """
 
     model_config = _STRICT
 
@@ -28,6 +39,20 @@ class Mp3Match(BaseModel):
     """Match files whose genre tag equals this value (case-insensitive)."""
     album_artist: str | None = None
     """Match files whose album artist tag equals this value (case-insensitive)."""
+    exclude: "Mp3Match | None" = None
+    """Files this entry would match are skipped when any tag listed here matches
+    (case-insensitive). Takes the same keys as an entry, including a nested exclude."""
+
+    @model_validator(mode="after")
+    def validate_exclude_has_tag(self) -> "Mp3Match":
+        has_tag = any((self.artist, self.album, self.genre, self.album_artist))
+        if self.exclude is not None and not has_tag:
+            raise ValueError(
+                "An entry with an exclude block must also list at least one tag "
+                "(artist, album, genre, or album_artist) to match; "
+                "'everything except X' is not supported."
+            )
+        return self
 
 
 class MatrixConfig(BaseModel):
@@ -35,19 +60,46 @@ class MatrixConfig(BaseModel):
 
     """
     MatrixConfig is the configuration for a single matrix.
-    It contains the source path, exclude path, destination path, and mp3 files to copy.
+    It contains the source path, exclude paths, destination path, and mp3 files to copy.
     The files are a list of dictionaries, each containing the artist, album, genre, and album_artist.
     """
 
     source_path: str
     """Source path is the directory to copy files from."""
-    exclude_path: str | None = None
-    """Exclude path is the directory to exclude files from copying."""
+    exclude_paths: list[str] = []
+    """Directories or files to leave out, with everything beneath them.
+    A plain entry is a literal path matched on whole path components. An entry may end
+    in ** to match by prefix: /music/rock** skips everything whose path starts with
+    /music/rock, and /music/rock/** skips everything beneath /music/rock.
+    No other wildcards are supported."""
+
+    @field_validator("exclude_paths")
+    @classmethod
+    def validate_exclude_paths(cls, paths: list[str]) -> list[str]:
+        for path in paths:
+            body = path[: -len(GLOB_TAIL)] if is_glob(path) else path
+            if any(char in body for char in "*?["):
+                raise ValueError(
+                    f"Exclude path '{path}' is not supported: wildcards are only "
+                    "allowed as a trailing '**', e.g. /music/rock** or /music/rock/**."
+                )
+        return paths
+
     destination_path: str
     """Destination path is the directory to copy files to."""
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_exclude_path(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "exclude_path" in data:
+            raise ValueError(
+                "'exclude_path' was replaced by 'exclude_paths', a list. "
+                f"Use:\n  exclude_paths:\n    - {data['exclude_path']}"
+            )
+        return data
+
     # While the input source_path, destination_.., and exclude_.. are strings,
-    # the properties source, destination, and exclude are File objects
+    # the properties source, destination, and excluded_files are File objects
     @computed_field
     @property
     def source(self) -> File:
@@ -60,8 +112,9 @@ class MatrixConfig(BaseModel):
 
     @computed_field
     @property
-    def exclude(self) -> File | None:
-        return File(path=self.exclude_path) if self.exclude_path else None
+    def excluded_files(self) -> list[File]:
+        # Glob entries need not exist; only literal paths are checked.
+        return [File(path=p) for p in self.exclude_paths if not is_glob(p)]
 
     mp3_files: list[Mp3Match]
     """Tag matches; a file is copied when it matches any entry."""
@@ -148,7 +201,7 @@ class ConfigFile(BaseModel):
             "matrix": [
                 {
                     "source_path": "/path/to/source",
-                    "exclude_path": "/path/to/exclude",
+                    "exclude_paths": ["/path/to/exclude"],
                     "destination_path": "/path/to/destination",
                     "mp3_files": [
                         {"artist": "Artist Name"},
@@ -168,6 +221,10 @@ class ConfigFile(BaseModel):
         return (
             f"{modeline}"
             "# Each mp3_files entry is optional; keep the tags you want to match.\n"
+            "# exclude_paths removes locations; an entry's exclude: removes tags, e.g.\n"
+            "#   - artist: Artist Name\n"
+            "#     exclude:\n"
+            "#       album: Album Name\n"
             f"{body}"
             "# Optional: shell commands to run after copying files.\n"
             "# transform:\n"
