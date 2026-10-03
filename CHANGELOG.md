@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v3.3.0 (2026-10-03)
+
+### Features
+
+- Add --prune flag to run subcommand ([#17](https://github.com/karldreher/mixtapematrix/pull/17),
+  [`22971fc`](https://github.com/karldreher/mixtapematrix/commit/22971fcbab7255f926243754893209525e0bca30))
+
+
 ## v3.2.0 (2026-10-03)
 
 ### Features
