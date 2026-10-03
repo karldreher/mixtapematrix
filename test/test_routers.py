@@ -1,4 +1,5 @@
 import os
+import struct
 
 import pytest
 
@@ -132,3 +133,23 @@ def test_untagged_files_are_cached_as_no_tag(tmp_path, library, read_counter):
     read_counter.clear()
     matched(router)
     assert read_counter == []
+
+
+@pytest.mark.parametrize(
+    "error", [struct.error("bad"), IndexError("bad"), RuntimeError("bad")]
+)
+def test_unparseable_file_does_not_abort_scan(tmp_path, library, monkeypatch, error):
+    from eyed3.id3 import Tag
+
+    real_parse = Tag.parse
+
+    def flaky_parse(self, path, *args, **kwargs):
+        if path.endswith("two.mp3"):
+            raise error
+        return real_parse(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(Tag, "parse", flaky_parse)
+    router = make_router(tmp_path, library, [{"artist": "Alpha"}])
+    assert matched(router) == ["one.mp3", "three.mp3"]
+    # The bad file is cached as unreadable, so the cache is still written.
+    assert router.cache.load()["a/two.mp3"][1] is None

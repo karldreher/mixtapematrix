@@ -2,7 +2,6 @@ import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 
-import eyed3
 from eyed3.id3 import Genre, Tag
 
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
@@ -18,7 +17,9 @@ def _load_tag(path: str) -> Tag | None:
     try:
         tag = Tag()
         return tag if tag.parse(path) else None
-    except (OSError, ValueError, eyed3.Error) as e:
+    except Exception as e:  # noqa: BLE001
+        # eyed3 can raise almost anything on a malformed tag (struct.error,
+        # IndexError, ...). One bad file must not abort the whole scan.
         print(f"Error loading {path}: {e}")
         return None
 
