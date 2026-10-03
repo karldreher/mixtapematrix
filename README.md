@@ -55,6 +55,7 @@ mixtapematrix run
 # Use --config to point at a file other than ./matrix.yaml
 # Running with no subcommand prints help and exits 1.
 # Use --no-cache to ignore the tag cache for one run.
+# Use --prune to delete destination files that no matrix copied (off by default).
 ```
 After running, this will send the files from `source_path` to `destination_path` accordingly.
 
