@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v3.2.0 (2026-10-03)
+
+### Features
+
+- Cache discovered tags with configurable expiration
+  ([#15](https://github.com/karldreher/mixtapematrix/pull/15),
+  [`6a9c965`](https://github.com/karldreher/mixtapematrix/commit/6a9c9652a1b75695d17e6019652c3eb3480c5f30))
+
+
 ## v3.1.0 (2026-10-03)
 
 ### Features
