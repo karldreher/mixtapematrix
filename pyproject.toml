@@ -1,6 +1,6 @@
 [project]
 name = "mixtapematrix"
-version = "3.3.0"
+version = "3.4.0"
 description = "Declarative MP3 File Management for passionate listeners."
 authors = [{ name = "Karl Dreher" }]
 requires-python = ">3.13, <3.15"
