@@ -21,6 +21,7 @@ dev = [
     "ruff>=0.15.20",
     "pytest~=9.1.1",
     "pytest-cov~=7.1.0",
+    "jsonschema>=4.26.0",
 ]
 release = ["python-semantic-release>=9.16.1,<10"]
 

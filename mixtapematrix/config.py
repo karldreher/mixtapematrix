@@ -1,10 +1,15 @@
+import json
 import sys
 from pathlib import Path
 
 import click
+import yaml
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from .routers.files import File
+
+CONFIG_FILENAME = "matrix.yaml"
+SCHEMA_FILENAME = "matrix.schema.json"
 
 _STRICT = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
@@ -104,29 +109,48 @@ class ConfigFile(BaseModel):
     """
 
     @staticmethod
+    def json_schema() -> dict:
+        """JSON Schema for editing a config file (validation mode, no computed fields)."""
+        return ConfigFile.model_json_schema(mode="validation")
+
+    @staticmethod
+    def default_config_yaml() -> str:
+        """The default config, built from plain data so it validates against the models."""
+        default = {
+            "matrix": [
+                {
+                    "source_path": "/path/to/source",
+                    "exclude_path": "/path/to/exclude",
+                    "destination_path": "/path/to/destination",
+                    "mp3_files": [
+                        {"artist": "Artist Name"},
+                        {"album": "Album Name"},
+                        {"genre": "Genre Name"},
+                        {"album_artist": "Album Artist Name"},
+                    ],
+                }
+            ]
+        }
+        body = yaml.safe_dump(default, sort_keys=False)
+        return (
+            f"# yaml-language-server: $schema=./{SCHEMA_FILENAME}\n"
+            "# Each mp3_files entry is optional; keep the tags you want to match.\n"
+            f"{body}"
+            "# Optional: shell commands to run after copying files.\n"
+            "# transform:\n"
+            "#   commands:\n"
+            "#     - ls -la\n"
+        )
+
+    @staticmethod
     def create_default_config():
-        if Path("matrix.yaml").exists():
-            click.echo("Configuration file already exists at matrix.yaml.")
+        config_path, schema_path = Path(CONFIG_FILENAME), Path(SCHEMA_FILENAME)
+        if config_path.exists():
+            click.echo(f"Configuration file already exists at {CONFIG_FILENAME}.")
             sys.exit(1)
-        with open("matrix.yaml", "w") as f:
-            # Right now, statically defined strings is the best way to do this.
-            # Programatically we might need a different BaseModel.
-            f.write(
-                """matrix:
-  - source_path: /path/to/source
-      exclude_path: /path/to/exclude
-      destination_path: /path/to/destination
-      mp3_files:
-      # All fields are optional.  You can pick and choose which fields to search for.
-      # Delete any that are not needed.
-      - artist: Artist Name
-      - album: Album Name
-      - genre: Genre Name
-      - album_artist: Album Artist Name
-# transform: 
-  # Optional transform configuration to run shell commands after copying files.
-  # - ls -la
-    """
-            )
-        click.echo("Default configuration file created at matrix.yaml")
+        config_path.write_text(ConfigFile.default_config_yaml())
+        click.echo(f"Default configuration file created at {CONFIG_FILENAME}")
+        # The schema is derived from the models, so it is always refreshed.
+        schema_path.write_text(json.dumps(ConfigFile.json_schema(), indent=2) + "\n")
+        click.echo(f"JSON Schema written to {SCHEMA_FILENAME}")
         sys.exit(0)

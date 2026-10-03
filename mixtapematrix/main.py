@@ -55,5 +55,5 @@ def run(config, debug):
 
 @cli.command()
 def init():
-    """Create a default matrix.yaml in the current directory."""
+    """Create a default matrix.yaml and matrix.schema.json in the current directory."""
     ConfigFile.create_default_config()

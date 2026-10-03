@@ -1,7 +1,10 @@
+import json
+
 import click
 import pytest
 import yaml
 from click.testing import CliRunner
+from jsonschema import Draft202012Validator
 
 from mixtapematrix.config import ConfigFile
 from mixtapematrix.main import MixtapeMatrix, cli
@@ -67,6 +70,35 @@ def test_init_creates_config_once(tmp_path, monkeypatch):
     runner = CliRunner()
     assert runner.invoke(cli, ["init"]).exit_code == 0
     assert runner.invoke(cli, ["init"]).exit_code == 1
+
+
+def test_init_writes_schema_and_modeline(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert CliRunner().invoke(cli, ["init"]).exit_code == 0
+    schema = json.loads((tmp_path / "matrix.schema.json").read_text())
+    Draft202012Validator.check_schema(schema)
+    assert schema == ConfigFile.model_json_schema(mode="validation")
+    text = (tmp_path / "matrix.yaml").read_text()
+    assert text.splitlines()[0] == (
+        "# yaml-language-server: $schema=./matrix.schema.json"
+    )
+
+
+def test_default_template_validates(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    CliRunner().invoke(cli, ["init"])
+    data = yaml.safe_load((tmp_path / "matrix.yaml").read_text())
+    Draft202012Validator(ConfigFile.json_schema()).validate(data)
+    assert ConfigFile.model_validate(data).matrix[0].mp3_files
+
+
+def test_schema_excludes_computed_fields_and_forbids_extras():
+    schema = ConfigFile.json_schema()
+    matrix = schema["$defs"]["MatrixConfig"]
+    assert not {"source", "destination", "exclude"} & set(matrix["properties"])
+    assert all(d["additionalProperties"] is False for d in schema["$defs"].values())
+    assert "File" not in schema["$defs"]
+    assert all("description" in p for p in matrix["properties"].values())
 
 
 def test_unknown_key_rejected():
