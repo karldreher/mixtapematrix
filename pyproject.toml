@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
+mixtape = "mixtapematrix.main:cli"
 mixtapematrix = "mixtapematrix.main:cli"
-mmatrix = "mixtapematrix.main:cli"
 
 [dependency-groups]
 dev = [

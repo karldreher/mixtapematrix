@@ -43,15 +43,15 @@ matrix:
       - artist: "Fear Factory"
 ```
 
-You can create a default config file with `mmatrix init`.  This also writes `matrix.schema.json` next to it, and the config references it with a `# yaml-language-server: $schema=./matrix.schema.json` comment.  With the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, VS Code then highlights errors and offers completions and type hints for the config.  Pass `--no-json-schema` to skip the schema file and the comment, and `--force` to overwrite an existing `matrix.yaml`.
+You can create a default config file with `mixtape init`.  This also writes `matrix.schema.json` next to it, and the config references it with a `# yaml-language-server: $schema=./matrix.schema.json` comment.  With the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, VS Code then highlights errors and offers completions and type hints for the config.  Pass `--no-json-schema` to skip the schema file and the comment, and `--force` to overwrite an existing `matrix.yaml`.
 
 Based on the config file, Mixtape Matrix will find any files in `source_path`, which match the directives in `mp3_files`.  If you want to keep funk and Fear Factory in your mixtape, the config file above is half-done for you!
 
 ## Run the tool
 
 ```
-mixtapematrix run
-# Or, the handy "mmatrix run"
+mixtape run
+# Or, the long form "mixtapematrix run"
 # Use --config to point at a file other than ./matrix.yaml
 # Running with no subcommand prints help and exits 1.
 # Use --no-cache to ignore the tag cache for one run.
@@ -59,7 +59,7 @@ mixtapematrix run
 ```
 After running, this will send the files from `source_path` to `destination_path` accordingly.
 
-Running a second `mmatrix` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
+Running a second `mixtape` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
 
 ## Speed up repeat runs with a tag cache
 
@@ -80,4 +80,4 @@ matrix:
 - **The cache belongs to the config file:** each cache is keyed by the config file's path and the `source_path`, so two config files never share or overwrite a cache. Moving or renaming a config file starts a new cache, and the old one is left behind until you clean it up.
 - **Where it lives:** `$XDG_CACHE_HOME/mixtapematrix/` (`~/.cache/mixtapematrix/` by default), never next to your config or music. The files are compressed and small: roughly 27 bytes per track, so a 5,000-track library takes about 150 KiB.
 
-Clean up with `mmatrix cache clean`, which removes expired caches, caches whose config file or source path no longer exists, and unreadable ones. Use `mmatrix cache clean --all` to remove every cache.
+Clean up with `mixtape cache clean`, which removes expired caches, caches whose config file or source path no longer exists, and unreadable ones. Use `mixtape cache clean --all` to remove every cache.

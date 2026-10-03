@@ -28,7 +28,7 @@ def test_second_instance_warns_and_proceeds(tmp_path, monkeypatch, args):
     monkeypatch.chdir(tmp_path)
     with single_instance():
         result = CliRunner().invoke(cli, args)
-    assert "Warning: Another mmatrix instance is already running." in result.output
+    assert "Warning: Another mixtape instance is already running." in result.output
     assert "Continuing anyway" in result.output
     if args[0] == "run":
         # run proceeds to its own work, which fails here only for the missing config

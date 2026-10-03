@@ -2,7 +2,7 @@
 On-disk cache of the ID3 tags discovered while scanning a source library.
 
 Each cache file holds one `source_path`'s tags: a small msgpack header (readable
-without decoding the body, so `mmatrix cache clean` stays cheap) followed by a
+without decoding the body, so `mixtape cache clean` stays cheap) followed by a
 zstd-compressed columnar body. Tag strings are stored once in a string table and
 referenced by index, which keeps the file small.
 """
@@ -89,7 +89,7 @@ def cache_key(config_path: Path, source_root: Path) -> str:
     # The key includes the config file's path, so a cache belongs to one config
     # file: two configs never read, write, or delete each other's cache, even
     # when they share a source_path or use different TTLs. The consequence is
-    # that moving or renaming a config orphans its cache; `mmatrix cache clean`
+    # that moving or renaming a config orphans its cache; `mixtape cache clean`
     # removes it.
     identity = f"{config_path.resolve()}\0{source_root.resolve()}"
     return hashlib.sha256(identity.encode()).hexdigest()

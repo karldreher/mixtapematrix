@@ -176,7 +176,7 @@ class ConfigFile(BaseModel):
             "# Optional: cache discovered MP3 tags so repeat runs are faster.\n"
             "# The cache belongs to this config file: it is keyed by this file's path\n"
             "# and each source_path, so moving or renaming this file starts a new cache.\n"
-            "# Run `mmatrix cache clean` to remove stale caches.\n"
+            "# Run `mixtape cache clean` to remove stale caches.\n"
             "# ttl is a whole number plus m, h, d, w, or mo (30 days).\n"
             "# cache:\n"
             "#   ttl: 2d\n"
