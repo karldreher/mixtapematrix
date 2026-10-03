@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v3.1.0 (2026-10-03)
+
+### Features
+
+- Emit json schema from mmatrix init ([#13](https://github.com/karldreher/mixtapematrix/pull/13),
+  [`4a31342`](https://github.com/karldreher/mixtapematrix/commit/4a31342582c62ef347048d4fdebad87dea8f87c0))
+
+
 ## v3.0.0 (2026-10-03)
 
 ### Continuous Integration
