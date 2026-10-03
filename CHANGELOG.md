@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v3.0.0 (2026-10-03)
+
+### Continuous Integration
+
+- Check out pr branch so semantic-release preview can resolve it
+  ([#11](https://github.com/karldreher/mixtapematrix/pull/11),
+  [`a0cf14f`](https://github.com/karldreher/mixtapematrix/commit/a0cf14fef107fdf0e6e49463ac94bfed1e75358d))
+
+### Features
+
+- Add run and init subcommands, show help on bare invocation
+  ([#10](https://github.com/karldreher/mixtapematrix/pull/10),
+  [`ee0010a`](https://github.com/karldreher/mixtapematrix/commit/ee0010a29598d66fef3a1fe86eed6310f458e471))
+
+BREAKING CHANGE: use of subcommands
+
+### Breaking Changes
+
+- Use of subcommands
+
+
 ## v2.2.2 (2026-10-01)
 
 ### Bug Fixes
