@@ -50,8 +50,8 @@ Based on the config file, Mixtape Matrix will find any files in `source_path`, w
 ## Run the tool
 
 ```
-mixtapematrix run
-# Or, the handy "mixtape run"
+mixtape run
+# Or, the long form "mixtapematrix run"
 # Use --config to point at a file other than ./matrix.yaml
 # Running with no subcommand prints help and exits 1.
 # Use --no-cache to ignore the tag cache for one run.
