@@ -123,3 +123,14 @@ def test_init_no_json_schema(tmp_path, monkeypatch):
     text = (tmp_path / "matrix.yaml").read_text()
     assert "yaml-language-server" not in text
     ConfigFile.model_validate(yaml.safe_load(text))
+
+
+def test_init_force_overwrites(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "matrix.yaml").write_text("matrix: []\n")
+    runner = CliRunner()
+    assert runner.invoke(cli, ["init"]).exit_code == 1
+    assert (tmp_path / "matrix.yaml").read_text() == "matrix: []\n"
+    assert runner.invoke(cli, ["init", "--force"]).exit_code == 0
+    assert "source_path" in (tmp_path / "matrix.yaml").read_text()
+    assert (tmp_path / "matrix.schema.json").exists()

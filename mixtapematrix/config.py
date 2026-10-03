@@ -148,10 +148,13 @@ class ConfigFile(BaseModel):
         )
 
     @staticmethod
-    def create_default_config(json_schema: bool = True):
+    def create_default_config(json_schema: bool = True, force: bool = False):
         config_path, schema_path = Path(CONFIG_FILENAME), Path(SCHEMA_FILENAME)
-        if config_path.exists():
-            click.echo(f"Configuration file already exists at {CONFIG_FILENAME}.")
+        if config_path.exists() and not force:
+            click.echo(
+                f"Configuration file already exists at {CONFIG_FILENAME}. "
+                "Use --force to overwrite it."
+            )
             sys.exit(1)
         config_path.write_text(ConfigFile.default_config_yaml(json_schema))
         click.echo(f"Default configuration file created at {CONFIG_FILENAME}")
