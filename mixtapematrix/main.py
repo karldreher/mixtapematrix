@@ -54,6 +54,11 @@ def run(config, debug):
 
 
 @cli.command()
-def init():
+@click.option(
+    "--no-json-schema",
+    is_flag=True,
+    help="Skip writing matrix.schema.json and the schema modeline",
+)
+def init(no_json_schema):
     """Create a default matrix.yaml and matrix.schema.json in the current directory."""
-    ConfigFile.create_default_config()
+    ConfigFile.create_default_config(json_schema=not no_json_schema)

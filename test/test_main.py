@@ -114,3 +114,12 @@ def test_unknown_key_rejected():
                 ]
             }
         )
+
+
+def test_init_no_json_schema(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert CliRunner().invoke(cli, ["init", "--no-json-schema"]).exit_code == 0
+    assert not (tmp_path / "matrix.schema.json").exists()
+    text = (tmp_path / "matrix.yaml").read_text()
+    assert "yaml-language-server" not in text
+    ConfigFile.model_validate(yaml.safe_load(text))

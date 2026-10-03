@@ -114,7 +114,7 @@ class ConfigFile(BaseModel):
         return ConfigFile.model_json_schema(mode="validation")
 
     @staticmethod
-    def default_config_yaml() -> str:
+    def default_config_yaml(json_schema: bool = True) -> str:
         """The default config, built from plain data so it validates against the models."""
         default = {
             "matrix": [
@@ -132,8 +132,13 @@ class ConfigFile(BaseModel):
             ]
         }
         body = yaml.safe_dump(default, sort_keys=False)
-        return (
+        modeline = (
             f"# yaml-language-server: $schema=./{SCHEMA_FILENAME}\n"
+            if json_schema
+            else ""
+        )
+        return (
+            f"{modeline}"
             "# Each mp3_files entry is optional; keep the tags you want to match.\n"
             f"{body}"
             "# Optional: shell commands to run after copying files.\n"
@@ -143,14 +148,17 @@ class ConfigFile(BaseModel):
         )
 
     @staticmethod
-    def create_default_config():
+    def create_default_config(json_schema: bool = True):
         config_path, schema_path = Path(CONFIG_FILENAME), Path(SCHEMA_FILENAME)
         if config_path.exists():
             click.echo(f"Configuration file already exists at {CONFIG_FILENAME}.")
             sys.exit(1)
-        config_path.write_text(ConfigFile.default_config_yaml())
+        config_path.write_text(ConfigFile.default_config_yaml(json_schema))
         click.echo(f"Default configuration file created at {CONFIG_FILENAME}")
-        # The schema is derived from the models, so it is always refreshed.
-        schema_path.write_text(json.dumps(ConfigFile.json_schema(), indent=2) + "\n")
-        click.echo(f"JSON Schema written to {SCHEMA_FILENAME}")
+        if json_schema:
+            # The schema is derived from the models, so it is always refreshed.
+            schema_path.write_text(
+                json.dumps(ConfigFile.json_schema(), indent=2) + "\n"
+            )
+            click.echo(f"JSON Schema written to {SCHEMA_FILENAME}")
         sys.exit(0)
