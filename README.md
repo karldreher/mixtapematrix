@@ -54,5 +54,29 @@ mixtapematrix run
 # Or, the handy "mmatrix run"
 # Use --config to point at a file other than ./matrix.yaml
 # Running with no subcommand prints help and exits 1.
+# Use --no-cache to ignore the tag cache for one run.
 ```
 After running, this will send the files from `source_path` to `destination_path` accordingly.
+
+Running a second `mmatrix` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
+
+## Speed up repeat runs with a tag cache
+
+Reading the ID3 tag of every MP3 is the slow part of a run. Add a `cache` block to cache the discovered tags between runs:
+
+```yaml
+cache:
+  ttl: 2d
+matrix:
+  - source_path: ./my-music
+    ...
+```
+
+`ttl` is a whole number followed by one unit: `m` (minutes), `h` (hours), `d` (days), `w` (weeks), or `mo` (months, fixed at 30 days). Examples: `30m`, `12h`, `2d`, `1w`, `1mo`. Without a `cache` block, nothing is cached.
+
+- **What is cached:** the artist, album, genre and album artist of every MP3 under `source_path`, so changing the `mp3_files` entries never needs a cache reset. A file whose modification time changed is re-read, new files are added, and deleted files are dropped.
+- **Expiry:** the first run after `ttl` has passed deletes the cache and rescans the whole library.
+- **The cache belongs to the config file:** each cache is keyed by the config file's path and the `source_path`, so two config files never share or overwrite a cache. Moving or renaming a config file starts a new cache, and the old one is left behind until you clean it up.
+- **Where it lives:** `$XDG_CACHE_HOME/mixtapematrix/` (`~/.cache/mixtapematrix/` by default), never next to your config or music. The files are compressed and small: roughly 27 bytes per track, so a 5,000-track library takes about 150 KiB.
+
+Clean up with `mmatrix cache clean`, which removes expired caches, caches whose config file or source path no longer exists, and unreadable ones. Use `mmatrix cache clean --all` to remove every cache.

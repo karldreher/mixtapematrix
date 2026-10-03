@@ -4,13 +4,23 @@ from functools import cached_property
 import click
 import yaml
 
-from .config import ConfigFile
+from .cache import TagCache, clean_cache, parse_ttl
+from .config import ConfigFile, MatrixConfig
+from .lock import LockError, single_instance
 from .routers.mp3_router import TagRouter
 
 
+def _format_bytes(size: float) -> str:
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if size < 1024 or unit == "GiB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
 class MixtapeMatrix:
-    def __init__(self, config: str, debug: bool = False):
+    def __init__(self, config: str, debug: bool = False, use_cache: bool = True):
         self.config = config
+        self.use_cache = use_cache
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
 
@@ -19,9 +29,22 @@ class MixtapeMatrix:
         with open(self.config) as f:
             return ConfigFile.model_validate(yaml.safe_load(f))
 
+    def tag_cache(self, matrix_config: MatrixConfig) -> TagCache | None:
+        """The tag cache for a matrix, or None when caching is off for this run."""
+        cache_config = self.config_data.cache
+        if not (self.use_cache and cache_config):
+            return None
+        return TagCache(
+            self.config,
+            matrix_config.source.path,
+            parse_ttl(cache_config.ttl),
+            log=self.logger,
+            debug=self.debug,
+        )
+
     def run(self):
         for matrix_config in self.config_data.matrix:
-            router = TagRouter(matrix_config)
+            router = TagRouter(matrix_config, cache=self.tag_cache(matrix_config))
             for file in router.source:
                 self.debug(f"Copying {file.path} to {matrix_config.destination.path}")
                 # TODO: not terribly optimized and could be invalid based on
@@ -43,14 +66,21 @@ def cli(ctx):
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         ctx.exit(1)
+    # Every subcommand holds the lock until it finishes. A second instance is
+    # warned about, not blocked: concurrent runs are discouraged, not forbidden.
+    try:
+        ctx.with_resource(single_instance())
+    except LockError as e:
+        click.echo(f"Warning: {e} Continuing anyway.", err=True)
 
 
 @cli.command()
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
 @click.option("--debug", help="Enable debug logging", is_flag=True)
-def run(config, debug):
+@click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
+def run(config, debug, no_cache):
     """Run the matrix described by a configuration file."""
-    MixtapeMatrix(config=config, debug=debug).run()
+    MixtapeMatrix(config=config, debug=debug, use_cache=not no_cache).run()
 
 
 @cli.command()
@@ -63,3 +93,21 @@ def run(config, debug):
 def init(no_json_schema, force):
     """Create a default matrix.yaml and matrix.schema.json in the current directory."""
     ConfigFile.create_default_config(json_schema=not no_json_schema, force=force)
+
+
+@cli.group(name="cache")
+def cache_group():
+    """Manage the tag cache."""
+
+
+@cache_group.command()
+@click.option(
+    "--all", "all_files", is_flag=True, help="Delete every cache file, not only stale"
+)
+def clean(all_files):
+    """Delete stale tag caches (expired, orphaned, or unreadable)."""
+    removed = clean_cache(all_files=all_files)
+    for item in removed:
+        click.echo(f"Removed {item.name} ({item.reason}, {_format_bytes(item.size)})")
+    freed = _format_bytes(sum(item.size for item in removed))
+    click.echo(f"Removed {len(removed)} cache file(s), freed {freed}")
