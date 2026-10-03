@@ -4,8 +4,9 @@ from pathlib import Path
 
 import click
 import yaml
-from pydantic import BaseModel, ConfigDict, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
+from .cache import TTL_PATTERN, parse_ttl
 from .routers.files import File
 
 CONFIG_FILENAME = "matrix.yaml"
@@ -92,6 +93,28 @@ class TransformConfig(BaseModel):
         return commands
 
 
+class CacheConfig(BaseModel):
+    """
+    CacheConfig enables the tag cache for every matrix in this config file.
+    The cache belongs to this file: it is keyed by this file's path and each
+    source_path, so moving or renaming the file starts a new cache.
+    """
+
+    model_config = _STRICT
+
+    ttl: str = Field(
+        json_schema_extra={"pattern": TTL_PATTERN, "examples": ["30m", "2d", "1w"]}
+    )
+    """How long the cache stays valid: a whole number plus m, h, d, w, or mo (30 days).
+    The first run after it expires deletes the cache and rescans the library."""
+
+    @field_validator("ttl")
+    @classmethod
+    def validate_ttl(cls, ttl: str) -> str:
+        parse_ttl(ttl)
+        return ttl
+
+
 class ConfigFile(BaseModel):
     model_config = _STRICT
 
@@ -106,6 +129,11 @@ class ConfigFile(BaseModel):
     Exercise caution when using this feature, as it can run arbitrary shell commands.  
     Anything you can do in a shell, you can do here.
     Try not to rm -rf yourself.
+    """
+    cache: CacheConfig | None = None
+    """
+    Cache is an optional CacheConfig that stores discovered MP3 tags between runs,
+    so repeat runs skip re-reading every file. Without it, no cache is read or written.
     """
 
     @staticmethod
@@ -145,6 +173,13 @@ class ConfigFile(BaseModel):
             "# transform:\n"
             "#   commands:\n"
             "#     - ls -la\n"
+            "# Optional: cache discovered MP3 tags so repeat runs are faster.\n"
+            "# The cache belongs to this config file: it is keyed by this file's path\n"
+            "# and each source_path, so moving or renaming this file starts a new cache.\n"
+            "# Run `mmatrix cache clean` to remove stale caches.\n"
+            "# ttl is a whole number plus m, h, d, w, or mo (30 days).\n"
+            "# cache:\n"
+            "#   ttl: 2d\n"
         )
 
     @staticmethod

@@ -1,9 +1,11 @@
+import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 
 import eyed3
 from eyed3.id3 import Genre, Tag
 
+from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig
 from .files import File, FileRouter, search_files
 
@@ -21,29 +23,63 @@ def _load_tag(path: str) -> Tag | None:
         return None
 
 
-def _tag_matches(tag: Tag, key: str, value: str) -> bool:
-    """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
-    if key == "genre":
-        # Genre is a special case: the tag is a Genre object (or None), compare by name.
-        # isinstance narrows the type: eyed3's setter accepts ints, the getter returns Genre | None.
-        genre = tag.genre
-        return (
-            isinstance(genre, Genre)
-            and genre.name is not None
-            and genre.name.lower() == value.lower()
-        )
-    return str(getattr(tag, key)).lower() == value.lower()
-
-
-def _file_matches(path: str, criteria: list[tuple[str, str]]) -> bool:
-    """True if the MP3 at path matches any criterion. Returns a bool so parsed tags are not retained."""
+def read_tags(path: str) -> Tags | None:
+    """The values of TAG_FIELDS for an MP3, or None if it has no readable tag."""
     tag = _load_tag(path)
-    return tag is not None and any(_tag_matches(tag, k, v) for k, v in criteria)
+    if tag is None:
+        return None
+    # Genre is a special case: the tag is a Genre object (or None), compare by name.
+    # isinstance narrows the type: eyed3's setter accepts ints, the getter returns Genre | None.
+    genre = tag.genre
+    return (
+        tag.artist,
+        tag.album,
+        genre.name if isinstance(genre, Genre) else None,
+        tag.album_artist,
+    )
+
+
+def _tag_matches(tags: Tags, key: str, value: str) -> bool:
+    """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
+    tag_value = tags[TAG_FIELDS.index(key)]
+    return tag_value is not None and tag_value.lower() == value.lower()
 
 
 class TagRouter(FileRouter):
-    def __init__(self, matrix_config: MatrixConfig):
+    def __init__(self, matrix_config: MatrixConfig, cache: TagCache | None = None):
         self.matrix_config = matrix_config
+        self.cache = cache
+
+    def _discover_tags(self, mp3_paths: list[str]) -> dict[str, Entry]:
+        """
+        Tags for every MP3, keyed by path relative to the source. Files whose mtime
+        matches the cache are not re-read. The cache is rewritten when anything changed.
+        """
+        root = self.matrix_config.source.path
+        cached = self.cache.load() if self.cache else {}
+        found: dict[str, Entry] = {}
+        misses: list[tuple[str, int]] = []
+        for path in mp3_paths:
+            try:
+                mtime = os.stat(path).st_mtime_ns
+            except OSError as e:
+                print(f"Error reading {path}: {e}")
+                continue
+            hit = cached.get(os.path.relpath(path, root))
+            if hit and hit[0] == mtime:
+                found[os.path.relpath(path, root)] = hit
+            else:
+                misses.append((path, mtime))
+
+        # Tag reads are I/O-bound, so overlap them; map() preserves input order.
+        with ThreadPoolExecutor() as pool:
+            read = pool.map(lambda miss: read_tags(miss[0]), misses)
+            for (path, mtime), tags in zip(misses, read, strict=True):
+                found[os.path.relpath(path, root)] = (mtime, tags)
+
+        if self.cache and (misses or found.keys() != cached.keys()):
+            self.cache.save(found)
+        return found
 
     @property
     def source(self) -> Generator[File]:
@@ -73,9 +109,8 @@ class TagRouter(FileRouter):
             if p.lower().endswith(".mp3")
         ]
 
-        # Tag reads are I/O-bound, so overlap them; map() preserves walk order.
-        with ThreadPoolExecutor() as pool:
-            matches = pool.map(lambda p: _file_matches(p, criteria), mp3_paths)
-            for file_path, matched in zip(mp3_paths, matches, strict=True):
-                if matched:
-                    yield File(path=file_path)
+        found = self._discover_tags(mp3_paths)
+        for file_path in mp3_paths:
+            _, tags = found.get(os.path.relpath(file_path, source_path), (0, None))
+            if tags and any(_tag_matches(tags, k, v) for k, v in criteria):
+                yield File(path=file_path)

@@ -13,3 +13,9 @@ def mkdirs():
     Path("test/source/exclude").rmdir()
     Path("test/output").rmdir()
     Path("test/source").rmdir()
+
+
+@fixture(autouse=True)
+def isolated_cache_dir(tmp_path, monkeypatch):
+    """Keep tests away from the real user cache directory."""
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))

@@ -141,3 +141,109 @@ def test_default_config_yaml_validates_against_schema(json_schema):
     data = yaml.safe_load(ConfigFile.default_config_yaml(json_schema=json_schema))
     Draft202012Validator(ConfigFile.json_schema()).validate(data)
     ConfigFile.model_validate(data)
+
+
+def write_cache_config(tmp_path, ttl="1d"):
+    from eyed3.id3 import Tag
+
+    source = tmp_path / "library"
+    source.mkdir()
+    (tmp_path / "out").mkdir()
+    song = source / "song.mp3"
+    song.touch()
+    tag = Tag()
+    tag.artist = "Alpha"
+    tag.save(str(song))
+    config = tmp_path / "matrix.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "matrix": [
+                    {
+                        "source_path": str(source),
+                        "destination_path": str(tmp_path / "out"),
+                        "mp3_files": [{"artist": "Alpha"}],
+                    }
+                ],
+                "cache": {"ttl": ttl},
+            }
+        )
+    )
+    return config
+
+
+def cache_files(tmp_path):
+    directory = tmp_path / "xdg-cache" / "mixtapematrix"
+    return sorted(directory.glob("*.mmcache")) if directory.exists() else []
+
+
+def test_cache_block_accepted_and_in_schema():
+    schema = ConfigFile.json_schema()
+    assert "ttl" in schema["$defs"]["CacheConfig"]["properties"]
+    assert "cache" in schema["properties"]
+    config = ConfigFile.model_validate(
+        {"matrix": [], "cache": {"ttl": "2d"}},
+    )
+    assert config.cache.ttl == "2d"
+    assert ConfigFile.model_validate({"matrix": []}).cache is None
+
+
+@pytest.mark.parametrize("ttl", ["0h", "1.5d", "1h30m", "2y", "1M", "abc", ""])
+def test_invalid_ttl_rejected(ttl):
+    with pytest.raises(ValueError, match="Invalid cache ttl"):
+        ConfigFile.model_validate({"matrix": [], "cache": {"ttl": ttl}})
+
+
+def test_invalid_ttl_rejected_by_json_schema():
+    validator = Draft202012Validator(ConfigFile.json_schema())
+    assert not validator.is_valid({"matrix": [], "cache": {"ttl": "1h30m"}})
+    assert validator.is_valid({"matrix": [], "cache": {"ttl": "1mo"}})
+
+
+def test_default_config_documents_per_file_cache():
+    text = ConfigFile.default_config_yaml()
+    assert "belongs to this config file" in text
+    assert "mmatrix cache clean" in text
+
+
+def test_run_writes_cache_only_when_configured(tmp_path):
+    config = write_cache_config(tmp_path)
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
+    assert result.exit_code == 0, result.output
+    assert len(cache_files(tmp_path)) == 1
+
+
+def test_run_without_cache_block_writes_nothing(tmp_path):
+    config = write_cache_config(tmp_path)
+    data = yaml.safe_load(config.read_text())
+    del data["cache"]
+    config.write_text(yaml.safe_dump(data))
+    assert CliRunner().invoke(cli, ["run", "--config", str(config)]).exit_code == 0
+    assert cache_files(tmp_path) == []
+
+
+def test_run_no_cache_flag_bypasses_cache(tmp_path):
+    config = write_cache_config(tmp_path)
+    args = ["run", "--config", str(config), "--no-cache"]
+    assert CliRunner().invoke(cli, args).exit_code == 0
+    assert cache_files(tmp_path) == []
+
+
+def test_cache_clean_command(tmp_path):
+    config = write_cache_config(tmp_path)
+    runner = CliRunner()
+    runner.invoke(cli, ["run", "--config", str(config)])
+    result = runner.invoke(cli, ["cache", "clean"])
+    assert result.exit_code == 0
+    assert "Removed 0 cache file(s)" in result.output
+    assert len(cache_files(tmp_path)) == 1
+    result = runner.invoke(cli, ["cache", "clean", "--all"])
+    assert result.exit_code == 0
+    assert "Removed 1 cache file(s)" in result.output
+    assert cache_files(tmp_path) == []
+
+
+def test_cache_clean_with_no_cache_directory(tmp_path):
+    result = CliRunner().invoke(cli, ["cache", "clean", "--all"])
+    assert result.exit_code == 0
+    assert "Removed 0 cache file(s)" in result.output
