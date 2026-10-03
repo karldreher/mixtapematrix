@@ -1,6 +1,7 @@
 import click
 import pytest
 import yaml
+from click.testing import CliRunner
 
 from mixtapematrix.config import ConfigFile
 from mixtapematrix.main import MixtapeMatrix, cli
@@ -36,4 +37,33 @@ def test_dangerous_transform():
 
 
 def test_cli():
-    assert isinstance(cli, click.Command)
+    assert isinstance(cli, click.Group)
+
+
+def test_bare_command_shows_help_and_exits_1():
+    result = CliRunner().invoke(cli, [])
+    assert result.exit_code == 1
+    assert "Usage:" in result.output
+    assert "run" in result.output
+    assert "init" in result.output
+
+
+def test_help_exits_0():
+    assert CliRunner().invoke(cli, ["--help"]).exit_code == 0
+
+
+def test_run_missing_config_fails():
+    result = CliRunner().invoke(cli, ["run", "--config", "does-not-exist.yaml"])
+    assert result.exit_code != 0
+
+
+def test_run_with_config(mkdirs):
+    result = CliRunner().invoke(cli, ["run", "--config", "test/matrix.yaml"])
+    assert result.exit_code == 0, result.output
+
+
+def test_init_creates_config_once(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    assert runner.invoke(cli, ["init"]).exit_code == 0
+    assert runner.invoke(cli, ["init"]).exit_code == 1
