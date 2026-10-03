@@ -274,7 +274,8 @@ def clean_cache(
 ) -> list[Removed]:
     """
     Delete stale cache files, or every cache file when all_files is set.
-    Only files this module created (by suffix) are ever touched.
+    Only files this module created (by suffix) are ever touched. The CLI holds the
+    single-instance lock, so no other process can be mid-write while this runs.
     """
     directory = directory or cache_dir()
     if not directory.is_dir():

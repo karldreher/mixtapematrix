@@ -58,6 +58,8 @@ mixtapematrix run
 ```
 After running, this will send the files from `source_path` to `destination_path` accordingly.
 
+Running a second `mmatrix` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
+
 ## Speed up repeat runs with a tag cache
 
 Reading the ID3 tag of every MP3 is the slow part of a run. Add a `cache` block to cache the discovered tags between runs:

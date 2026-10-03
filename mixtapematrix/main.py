@@ -6,6 +6,7 @@ import yaml
 
 from .cache import TagCache, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
+from .lock import LockError, single_instance
 from .routers.mp3_router import TagRouter
 
 
@@ -65,6 +66,12 @@ def cli(ctx):
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         ctx.exit(1)
+    # Every subcommand holds the lock until it finishes. A second instance is
+    # warned about, not blocked: concurrent runs are discouraged, not forbidden.
+    try:
+        ctx.with_resource(single_instance())
+    except LockError as e:
+        click.echo(f"Warning: {e} Continuing anyway.", err=True)
 
 
 @cli.command()
