@@ -15,7 +15,7 @@ from pydantic import (
 )
 
 from .cache import TTL_PATTERN, parse_ttl
-from .routers.files import File
+from .routers.files import GLOB_TAIL, File, is_glob
 
 CONFIG_FILENAME = "matrix.yaml"
 SCHEMA_FILENAME = "matrix.schema.json"
@@ -68,7 +68,23 @@ class MatrixConfig(BaseModel):
     """Source path is the directory to copy files from."""
     exclude_paths: list[str] = []
     """Directories or files to leave out, with everything beneath them.
-    Each entry is a literal path matched on whole path components, not a pattern."""
+    A plain entry is a literal path matched on whole path components. An entry may end
+    in ** to match by prefix: /music/rock** skips everything whose path starts with
+    /music/rock, and /music/rock/** skips everything beneath /music/rock.
+    No other wildcards are supported."""
+
+    @field_validator("exclude_paths")
+    @classmethod
+    def validate_exclude_paths(cls, paths: list[str]) -> list[str]:
+        for path in paths:
+            body = path[: -len(GLOB_TAIL)] if is_glob(path) else path
+            if any(char in body for char in "*?["):
+                raise ValueError(
+                    f"Exclude path '{path}' is not supported: wildcards are only "
+                    "allowed as a trailing '**', e.g. /music/rock** or /music/rock/**."
+                )
+        return paths
+
     destination_path: str
     """Destination path is the directory to copy files to."""
 
@@ -97,7 +113,8 @@ class MatrixConfig(BaseModel):
     @computed_field
     @property
     def excluded_files(self) -> list[File]:
-        return [File(path=path) for path in self.exclude_paths]
+        # Glob entries need not exist; only literal paths are checked.
+        return [File(path=p) for p in self.exclude_paths if not is_glob(p)]
 
     mp3_files: list[Mp3Match]
     """Tag matches; a file is copied when it matches any entry."""

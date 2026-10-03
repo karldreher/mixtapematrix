@@ -357,3 +357,16 @@ def test_schema_describes_exclude_options():
     match = schema["$defs"]["Mp3Match"]["properties"]
     assert "description" in match["exclude"]
     assert "Mp3Match" in str(match["exclude"])
+
+
+@pytest.mark.parametrize("path", ["/m/*/rock", "/m/ro?k", "/m/[rp]ock", "/m/*.mp3"])
+def test_non_tail_wildcards_rejected(path):
+    from mixtapematrix.config import MatrixConfig
+
+    with pytest.raises(ValueError, match="trailing '\\*\\*'"):
+        MatrixConfig(
+            source_path="a",
+            exclude_paths=[path],
+            destination_path="b",
+            mp3_files=[{"artist": "x"}],
+        )

@@ -97,19 +97,50 @@ def prune_destination(root: str, keep: set[str]) -> list[str]:
     return removed
 
 
+GLOB_TAIL = "**"
+
+
+def is_glob(path: str) -> bool:
+    """A trailing-`**` exclude pattern, e.g. /music/rock** or /music/rock/**."""
+    return path.endswith(GLOB_TAIL)
+
+
+def glob_prefix(pattern: str) -> str:
+    """
+    The absolute path prefix a trailing-`**` pattern stands for. `rock**` matches
+    anything whose path starts with `rock`; `rock/**` matches everything beneath rock.
+    """
+    head = pattern[: -len(GLOB_TAIL)]
+    prefix = os.path.abspath(head)
+    return (
+        prefix + os.sep if head.endswith(("/", os.sep)) and prefix != os.sep else prefix
+    )
+
+
 def search_files(source_path: str, exclude_paths: Iterable[str] = ()) -> Generator[str]:
     """
     Walk the source path and yield all files.
-    Each exclude path removes that directory (or file) and everything beneath it.
-    Excludes match whole paths after resolving to absolute, never by substring.
+    A plain exclude path removes that directory (or file) and everything beneath it,
+    matched on whole paths after resolving to absolute, never by substring.
+    A path ending in `**` is a prefix pattern: see glob_prefix.
     """
-    excluded = {os.path.abspath(path) for path in exclude_paths}
+    patterns = [p for p in exclude_paths if is_glob(p)]
+    prefixes = tuple(glob_prefix(p) for p in patterns)
+    excluded = {os.path.abspath(p) for p in exclude_paths if not is_glob(p)}
+
+    def is_excluded(path: str, is_dir: bool) -> bool:
+        absolute = os.path.abspath(path)
+        if absolute in excluded:
+            return True
+        # A directory is tested with a trailing separator so `rock/**` also prunes rock.
+        return absolute.startswith(prefixes) or (
+            is_dir and (absolute + os.sep).startswith(prefixes)
+        )
+
     for root, dirs, files in os.walk(source_path):
         # Prune in place so os.walk never descends into (or stats) excluded subtrees.
-        dirs[:] = [
-            d for d in dirs if os.path.abspath(os.path.join(root, d)) not in excluded
-        ]
+        dirs[:] = [d for d in dirs if not is_excluded(os.path.join(root, d), True)]
         for file in files:
             path = os.path.join(root, file)
-            if os.path.abspath(path) not in excluded:
+            if not is_excluded(path, False):
                 yield path

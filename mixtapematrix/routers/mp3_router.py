@@ -105,7 +105,8 @@ class TagRouter(FileRouter):
                 f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
             )
         source_path = self.matrix_config.source.path
-        exclude_paths = [f.path for f in self.matrix_config.excluded_files]
+        _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
+        exclude_paths = self.matrix_config.exclude_paths
 
         mp3_paths = [
             p

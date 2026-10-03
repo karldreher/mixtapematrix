@@ -279,3 +279,47 @@ def test_exclude_changes_need_no_tag_rereads(tmp_path, catalog, read_counter):
     second = make_router(tmp_path, catalog, [ENTRY_1])
     assert matched(second) == ["r3.mp3"]
     assert read_counter == []
+
+
+@pytest.fixture
+def genres_tree(tmp_path):
+    root = tmp_path / "library"
+    for folder in ("rock", "rockabilly", "Crockett", "pop"):
+        make_mp3(root / folder / "deep" / f"{folder}.mp3", artist="Alpha")
+    return root
+
+
+@pytest.mark.parametrize(
+    ("pattern", "expected"),
+    [
+        # prefix: rock and rockabilly, not Crockett
+        ("{root}/rock**", ["Crockett.mp3", "pop.mp3"]),
+        # everything beneath rock only
+        ("{root}/rock/**", ["Crockett.mp3", "pop.mp3", "rockabilly.mp3"]),
+        ("{root}/**", []),
+    ],
+)
+def test_tail_glob_excludes(tmp_path, genres_tree, pattern, expected):
+    router = make_router(
+        tmp_path,
+        genres_tree,
+        [{"artist": "Alpha"}],
+        False,
+        [pattern.format(root=genres_tree)],
+    )
+    assert matched(router) == expected
+
+
+def test_relative_tail_glob_resolves_like_absolute(tmp_path, genres_tree, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    router = make_router(
+        tmp_path, "library", [{"artist": "Alpha"}], False, ["library/rock/**"]
+    )
+    assert matched(router) == ["Crockett.mp3", "pop.mp3", "rockabilly.mp3"]
+
+
+def test_glob_exclude_need_not_exist(tmp_path, genres_tree):
+    router = make_router(
+        tmp_path, genres_tree, [{"artist": "Alpha"}], False, [f"{genres_tree}/nope/**"]
+    )
+    assert len(matched(router)) == 4

@@ -57,7 +57,7 @@ Based on the config file, Mixtape Matrix will find any files in `source_path`, w
 
 Two options leave files out, and they work at different levels:
 
-- `exclude_paths` (per matrix) works on **locations**. Each entry is a literal directory or file, and everything beneath it is skipped without being read. Entries match whole path components, so `rock` never excludes `Crockett`, and relative paths work however `source_path` is written. Each entry must exist.
+- `exclude_paths` (per matrix) works on **locations**. Each entry is a directory or file, and everything beneath it is skipped without being read. A plain entry matches whole path components, so `rock` never excludes `Crockett`, and relative paths work however `source_path` is written. Plain entries must exist. An entry may end in `**` to match by prefix: `/music/rock**` skips everything whose path starts with `/music/rock` (including `rockabilly`), and `/music/rock/**` skips everything beneath `/music/rock`. `**` is only supported at the end of an entry, and glob entries need not exist.
 - `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists.
 
 Matching uses one rule everywhere: an entry or `exclude:` block matches when **any** tag it lists matches (case-insensitive). A file is copied when it matches **at least one** entry and that entry's `exclude:` does not match. An exception in one entry never removes a file that another entry matches. An entry needs at least one tag of its own, so "everything except X" is not supported.
