@@ -1,14 +1,32 @@
 import sys
 from pathlib import Path
-from typing import Literal
 
 import click
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from .routers.files import File
 
+_STRICT = ConfigDict(extra="forbid", use_attribute_docstrings=True)
+
+
+class Mp3Match(BaseModel):
+    """A set of ID3 tags to match. A file is copied when any listed tag matches."""
+
+    model_config = _STRICT
+
+    artist: str | None = None
+    """Match files whose artist tag equals this value (case-insensitive)."""
+    album: str | None = None
+    """Match files whose album tag equals this value (case-insensitive)."""
+    genre: str | None = None
+    """Match files whose genre tag equals this value (case-insensitive)."""
+    album_artist: str | None = None
+    """Match files whose album artist tag equals this value (case-insensitive)."""
+
 
 class MatrixConfig(BaseModel):
+    model_config = _STRICT
+
     """
     MatrixConfig is the configuration for a single matrix.
     It contains the source path, exclude path, destination path, and mp3 files to copy.
@@ -39,11 +57,13 @@ class MatrixConfig(BaseModel):
     def exclude(self) -> File | None:
         return File(path=self.exclude_path) if self.exclude_path else None
 
-    # TODO album_artist is probably wrong, check later
-    mp3_files: list[dict[Literal["artist", "album", "genre", "album_artist"], str]]
+    mp3_files: list[Mp3Match]
+    """Tag matches; a file is copied when it matches any entry."""
 
 
 class TransformConfig(BaseModel):
+    model_config = _STRICT
+
     """
     TransformConfig represents a list of shell commands to run after files are copied.
     Each command is a string that will be executed in the shell.
@@ -68,6 +88,8 @@ class TransformConfig(BaseModel):
 
 
 class ConfigFile(BaseModel):
+    model_config = _STRICT
+
     matrix: list[MatrixConfig]
     """
     Matrix is a list of MatrixConfig objects, each representing a matrix configuration.

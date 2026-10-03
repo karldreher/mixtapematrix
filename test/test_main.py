@@ -67,3 +67,18 @@ def test_init_creates_config_once(tmp_path, monkeypatch):
     runner = CliRunner()
     assert runner.invoke(cli, ["init"]).exit_code == 0
     assert runner.invoke(cli, ["init"]).exit_code == 1
+
+
+def test_unknown_key_rejected():
+    with pytest.raises(ValueError):
+        ConfigFile.model_validate(
+            {
+                "matrix": [
+                    {
+                        "source_path": "a",
+                        "destination_path": "b",
+                        "mp3_files": [{"artst": "x"}],
+                    }
+                ]
+            }
+        )
