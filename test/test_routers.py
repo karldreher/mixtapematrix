@@ -41,7 +41,7 @@ def library(tmp_path):
     return root
 
 
-def make_router(tmp_path, library, mp3_files, cache=True):
+def make_router(tmp_path, library, mp3_files, cache=True, exclude_paths=()):
     from mixtapematrix.cache import TagCache, parse_ttl
     from mixtapematrix.config import MatrixConfig
     from mixtapematrix.routers.mp3_router import TagRouter
@@ -50,6 +50,7 @@ def make_router(tmp_path, library, mp3_files, cache=True):
     destination.mkdir(exist_ok=True)
     matrix = MatrixConfig(
         source_path=str(library),
+        exclude_paths=[str(p) for p in exclude_paths],
         destination_path=str(destination),
         mp3_files=mp3_files,
     )
@@ -153,3 +154,128 @@ def test_unparseable_file_does_not_abort_scan(tmp_path, library, monkeypatch, er
     assert matched(router) == ["one.mp3", "three.mp3"]
     # The bad file is cached as unreadable, so the cache is still written.
     assert router.cache.load()["a/two.mp3"][1] is None
+
+
+def test_multiple_excluded_paths(tmp_path, library):
+    router = make_router(
+        tmp_path,
+        library,
+        [{"artist": "Alpha"}, {"artist": "Beta"}],
+        cache=False,
+        exclude_paths=[library / "a", library / "b"],
+    )
+    assert matched(router) == []
+
+
+def test_excluded_directory_and_single_file(tmp_path, library):
+    by_dir = make_router(
+        tmp_path, library, [{"artist": "Alpha"}], False, [library / "a"]
+    )
+    assert matched(by_dir) == ["three.mp3"]
+    by_file = make_router(
+        tmp_path, library, [{"artist": "Alpha"}], False, [library / "a" / "one.mp3"]
+    )
+    assert matched(by_file) == ["three.mp3"]
+
+
+def test_exclude_path_is_not_a_substring_match(tmp_path):
+    root = tmp_path / "library"
+    make_mp3(root / "rock" / "x.mp3", artist="Alpha")
+    make_mp3(root / "Crockett" / "y.mp3", artist="Alpha")
+    make_mp3(root / "rock" / "deep" / "z.mp3", artist="Alpha")
+    router = make_router(tmp_path, root, [{"artist": "Alpha"}], False, [root / "rock"])
+    assert matched(router) == ["y.mp3"]
+
+
+def test_relative_and_absolute_excludes_resolve_the_same(
+    tmp_path, library, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    relative = make_router(
+        tmp_path, "library", [{"artist": "Alpha"}], False, ["library/a"]
+    )
+    absolute = make_router(
+        tmp_path, library, [{"artist": "Alpha"}], False, [library / "a"]
+    )
+    assert matched(relative) == matched(absolute) == ["three.mp3"]
+
+
+@pytest.fixture
+def catalog(tmp_path):
+    root = tmp_path / "library"
+    files = {
+        "r1": ("Artist Name", "Album Name 1", "rock", None),
+        "r3": ("Artist Name", "Album Name 3", "rock", None),
+        "f1": ("Artist Name", "Album Name 1", "funk", None),
+        "fb": ("Artist B", "Album Name 5", "funk", "Various"),
+        "fc2": ("Artist C", "Album Name 2", "funk", None),
+        "fc4": ("Artist C", "Album Name 4", "funk", None),
+    }
+    for name, (artist, album, genre, album_artist) in files.items():
+        tags = {"artist": artist, "album": album, "genre": genre}
+        if album_artist:
+            tags["album_artist"] = album_artist
+        make_mp3(root / f"{name}.mp3", **tags)
+    (root / "plain.mp3").touch()
+    return root
+
+
+ENTRY_1 = {"artist": "Artist Name", "exclude": {"album": "Album Name 1"}}
+ENTRY_2 = {
+    "genre": "funk",
+    "exclude": {"artist": "Artist B", "album": "Album Name 2"},
+}
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        ([ENTRY_1], ["r3"]),
+        ([ENTRY_2], ["f1", "fc4"]),
+        # f1 is excepted by entry 1 but rescued by entry 2.
+        ([ENTRY_1, ENTRY_2], ["f1", "fc4", "r3"]),
+        # an exception on each of the four tags
+        ([{"genre": "funk", "exclude": {"artist": "Artist C"}}], ["f1", "fb"]),
+        (
+            [{"genre": "funk", "exclude": {"album": "Album Name 1"}}],
+            ["fb", "fc2", "fc4"],
+        ),
+        ([{"artist": "Artist Name", "exclude": {"genre": "rock"}}], ["f1"]),
+        (
+            [{"genre": "funk", "exclude": {"album_artist": "various"}}],
+            ["f1", "fc2", "fc4"],
+        ),
+        # case-insensitive, both for the entry and for the exception
+        ([{"genre": "FUNK", "exclude": {"artist": "ARTIST c"}}], ["f1", "fb"]),
+        # nested: exclude artist C unless it is album 4
+        (
+            [
+                {
+                    "genre": "funk",
+                    "exclude": {
+                        "artist": "Artist C",
+                        "exclude": {"album": "Album Name 4"},
+                    },
+                }
+            ],
+            ["f1", "fb", "fc4"],
+        ),
+        # the exception removes every match of its entry
+        ([{"artist": "Artist B", "exclude": {"genre": "funk"}}], []),
+        # no exclude: behaves as before
+        ([{"artist": "Artist C"}], ["fc2", "fc4"]),
+    ],
+)
+def test_exclude_blocks(tmp_path, catalog, entries, expected):
+    router = make_router(tmp_path, catalog, entries, cache=False)
+    names = [name.removesuffix(".mp3") for name in matched(router)]
+    assert names == expected
+
+
+def test_exclude_changes_need_no_tag_rereads(tmp_path, catalog, read_counter):
+    first = make_router(tmp_path, catalog, [{"artist": "Artist Name"}])
+    assert len(matched(first)) == 3
+    read_counter.clear()
+    second = make_router(tmp_path, catalog, [ENTRY_1])
+    assert matched(second) == ["r3.mp3"]
+    assert read_counter == []

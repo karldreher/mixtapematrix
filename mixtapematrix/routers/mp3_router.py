@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from eyed3.id3 import Genre, Tag
 
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
-from ..config import MatrixConfig
+from ..config import MatrixConfig, Mp3Match
 from .files import File, FileRouter, search_files
 
 
@@ -44,6 +44,17 @@ def _tag_matches(tags: Tags, key: str, value: str) -> bool:
     """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
     tag_value = tags[TAG_FIELDS.index(key)]
     return tag_value is not None and tag_value.lower() == value.lower()
+
+
+def _entry_matches(tags: Tags, entry: Mp3Match) -> bool:
+    """
+    An entry matches when any of its own tags match and its exclude block does not.
+    An exclude block is evaluated the same way, so nested excludes work to any depth.
+    """
+    own = [(k, v) for k in TAG_FIELDS if (v := getattr(entry, k)) is not None]
+    if not any(_tag_matches(tags, k, v) for k, v in own):
+        return False
+    return entry.exclude is None or not _entry_matches(tags, entry.exclude)
 
 
 class TagRouter(FileRouter):
@@ -94,24 +105,18 @@ class TagRouter(FileRouter):
                 f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
             )
         source_path = self.matrix_config.source.path
-        exclude_path = (
-            self.matrix_config.exclude.path if self.matrix_config.exclude else None
-        )
-
-        criteria = [
-            (k, v)
-            for entry in self.matrix_config.mp3_files
-            for k, v in entry.model_dump(exclude_none=True).items()
-        ]
+        exclude_paths = [f.path for f in self.matrix_config.excluded_files]
 
         mp3_paths = [
             p
-            for p in search_files(source_path, exclude_path)
+            for p in search_files(source_path, exclude_paths)
             if p.lower().endswith(".mp3")
         ]
 
         found = self._discover_tags(mp3_paths)
         for file_path in mp3_paths:
             _, tags = found.get(os.path.relpath(file_path, source_path), (0, None))
-            if tags and any(_tag_matches(tags, k, v) for k, v in criteria):
+            if tags and any(
+                _entry_matches(tags, entry) for entry in self.matrix_config.mp3_files
+            ):
                 yield File(path=file_path)

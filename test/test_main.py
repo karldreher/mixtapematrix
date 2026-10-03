@@ -95,7 +95,7 @@ def test_default_template_validates(tmp_path, monkeypatch):
 def test_schema_excludes_computed_fields_and_forbids_extras():
     schema = ConfigFile.json_schema()
     matrix = schema["$defs"]["MatrixConfig"]
-    assert not {"source", "destination", "exclude"} & set(matrix["properties"])
+    assert not {"source", "destination", "excluded_files"} & set(matrix["properties"])
     assert all(d["additionalProperties"] is False for d in schema["$defs"].values())
     assert "File" not in schema["$defs"]
     assert all("description" in p for p in matrix["properties"].values())
@@ -308,3 +308,52 @@ def test_run_prune_refuses_destination_overlapping_source(tmp_path):
     assert result.exit_code != 0
     assert "overlaps" in result.output
     assert (tmp_path / "library" / "song.mp3").exists()
+
+
+def test_legacy_exclude_path_rejected_with_migration_message():
+    with pytest.raises(ValueError, match="exclude_paths") as error:
+        ConfigFile.model_validate(
+            {
+                "matrix": [
+                    {
+                        "source_path": "a",
+                        "exclude_path": "a/skip",
+                        "destination_path": "b",
+                        "mp3_files": [{"artist": "x"}],
+                    }
+                ]
+            }
+        )
+    assert "- a/skip" in str(error.value)
+
+
+def test_exclude_only_entry_rejected():
+    from mixtapematrix.config import Mp3Match
+
+    with pytest.raises(ValueError, match="at least one tag"):
+        Mp3Match(exclude={"album": "X"})
+    with pytest.raises(ValueError, match="at least one tag"):
+        Mp3Match(artist="A", exclude={"exclude": {"album": "X"}})
+
+
+def test_missing_exclude_path_fails_when_files_are_built(mkdirs):
+    from mixtapematrix.config import MatrixConfig
+
+    matrix = MatrixConfig(
+        source_path="test/source",
+        exclude_paths=["test/source/missing"],
+        destination_path="test/output",
+        mp3_files=[{"artist": "x"}],
+    )
+    with pytest.raises(ValueError, match="does not exist"):
+        _ = matrix.excluded_files
+
+
+def test_schema_describes_exclude_options():
+    schema = ConfigFile.json_schema()
+    matrix = schema["$defs"]["MatrixConfig"]["properties"]
+    assert "exclude_paths" in matrix and "exclude_path" not in matrix
+    assert matrix["exclude_paths"]["type"] == "array"
+    match = schema["$defs"]["Mp3Match"]["properties"]
+    assert "description" in match["exclude"]
+    assert "Mp3Match" in str(match["exclude"])

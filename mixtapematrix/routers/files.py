@@ -2,7 +2,7 @@ import os
 import shutil
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 
 from pydantic import BaseModel, computed_field, field_validator
 
@@ -97,16 +97,19 @@ def prune_destination(root: str, keep: set[str]) -> list[str]:
     return removed
 
 
-def search_files(source_path: str, exclude_path: str | None = None) -> Generator[str]:
+def search_files(source_path: str, exclude_paths: Iterable[str] = ()) -> Generator[str]:
     """
     Walk the source path and yield all files.
-    If exclude_path is provided, skip any files in that path.
+    Each exclude path removes that directory (or file) and everything beneath it.
+    Excludes match whole paths after resolving to absolute, never by substring.
     """
+    excluded = {os.path.abspath(path) for path in exclude_paths}
     for root, dirs, files in os.walk(source_path):
-        if exclude_path:
-            # Prune in place so os.walk does not descend into excluded subtrees.
-            dirs[:] = [d for d in dirs if exclude_path not in os.path.join(root, d)]
-            if exclude_path in root:
-                continue
+        # Prune in place so os.walk never descends into (or stats) excluded subtrees.
+        dirs[:] = [
+            d for d in dirs if os.path.abspath(os.path.join(root, d)) not in excluded
+        ]
         for file in files:
-            yield os.path.join(root, file)
+            path = os.path.join(root, file)
+            if os.path.abspath(path) not in excluded:
+                yield path
