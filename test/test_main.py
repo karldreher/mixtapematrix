@@ -203,7 +203,7 @@ def test_invalid_ttl_rejected_by_json_schema():
 def test_default_config_documents_per_file_cache():
     text = ConfigFile.default_config_yaml()
     assert "belongs to this config file" in text
-    assert "mmatrix cache clean" in text
+    assert "mixtape cache clean" in text
 
 
 def test_run_writes_cache_only_when_configured(tmp_path):
