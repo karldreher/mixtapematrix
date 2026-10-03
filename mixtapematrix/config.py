@@ -1,14 +1,37 @@
+import json
 import sys
 from pathlib import Path
-from typing import Literal
 
 import click
-from pydantic import BaseModel, computed_field, field_validator
+import yaml
+from pydantic import BaseModel, ConfigDict, computed_field, field_validator
 
 from .routers.files import File
 
+CONFIG_FILENAME = "matrix.yaml"
+SCHEMA_FILENAME = "matrix.schema.json"
+
+_STRICT = ConfigDict(extra="forbid", use_attribute_docstrings=True)
+
+
+class Mp3Match(BaseModel):
+    """A set of ID3 tags to match. A file is copied when any listed tag matches."""
+
+    model_config = _STRICT
+
+    artist: str | None = None
+    """Match files whose artist tag equals this value (case-insensitive)."""
+    album: str | None = None
+    """Match files whose album tag equals this value (case-insensitive)."""
+    genre: str | None = None
+    """Match files whose genre tag equals this value (case-insensitive)."""
+    album_artist: str | None = None
+    """Match files whose album artist tag equals this value (case-insensitive)."""
+
 
 class MatrixConfig(BaseModel):
+    model_config = _STRICT
+
     """
     MatrixConfig is the configuration for a single matrix.
     It contains the source path, exclude path, destination path, and mp3 files to copy.
@@ -39,11 +62,13 @@ class MatrixConfig(BaseModel):
     def exclude(self) -> File | None:
         return File(path=self.exclude_path) if self.exclude_path else None
 
-    # TODO album_artist is probably wrong, check later
-    mp3_files: list[dict[Literal["artist", "album", "genre", "album_artist"], str]]
+    mp3_files: list[Mp3Match]
+    """Tag matches; a file is copied when it matches any entry."""
 
 
 class TransformConfig(BaseModel):
+    model_config = _STRICT
+
     """
     TransformConfig represents a list of shell commands to run after files are copied.
     Each command is a string that will be executed in the shell.
@@ -68,6 +93,8 @@ class TransformConfig(BaseModel):
 
 
 class ConfigFile(BaseModel):
+    model_config = _STRICT
+
     matrix: list[MatrixConfig]
     """
     Matrix is a list of MatrixConfig objects, each representing a matrix configuration.
@@ -82,29 +109,59 @@ class ConfigFile(BaseModel):
     """
 
     @staticmethod
-    def create_default_config():
-        if Path("matrix.yaml").exists():
-            click.echo("Configuration file already exists at matrix.yaml.")
-            sys.exit(1)
-        with open("matrix.yaml", "w") as f:
-            # Right now, statically defined strings is the best way to do this.
-            # Programatically we might need a different BaseModel.
-            f.write(
-                """matrix:
-  - source_path: /path/to/source
-      exclude_path: /path/to/exclude
-      destination_path: /path/to/destination
-      mp3_files:
-      # All fields are optional.  You can pick and choose which fields to search for.
-      # Delete any that are not needed.
-      - artist: Artist Name
-      - album: Album Name
-      - genre: Genre Name
-      - album_artist: Album Artist Name
-# transform: 
-  # Optional transform configuration to run shell commands after copying files.
-  # - ls -la
-    """
+    def json_schema() -> dict:
+        """JSON Schema for editing a config file (validation mode, no computed fields)."""
+        return ConfigFile.model_json_schema(mode="validation")
+
+    @staticmethod
+    def default_config_yaml(json_schema: bool = True) -> str:
+        """The default config, built from plain data so it validates against the models."""
+        default = {
+            "matrix": [
+                {
+                    "source_path": "/path/to/source",
+                    "exclude_path": "/path/to/exclude",
+                    "destination_path": "/path/to/destination",
+                    "mp3_files": [
+                        {"artist": "Artist Name"},
+                        {"album": "Album Name"},
+                        {"genre": "Genre Name"},
+                        {"album_artist": "Album Artist Name"},
+                    ],
+                }
+            ]
+        }
+        body = yaml.safe_dump(default, sort_keys=False)
+        modeline = (
+            f"# yaml-language-server: $schema=./{SCHEMA_FILENAME}\n"
+            if json_schema
+            else ""
+        )
+        return (
+            f"{modeline}"
+            "# Each mp3_files entry is optional; keep the tags you want to match.\n"
+            f"{body}"
+            "# Optional: shell commands to run after copying files.\n"
+            "# transform:\n"
+            "#   commands:\n"
+            "#     - ls -la\n"
+        )
+
+    @staticmethod
+    def create_default_config(json_schema: bool = True, force: bool = False):
+        config_path, schema_path = Path(CONFIG_FILENAME), Path(SCHEMA_FILENAME)
+        if config_path.exists() and not force:
+            click.echo(
+                f"Configuration file already exists at {CONFIG_FILENAME}. "
+                "Use --force to overwrite it."
             )
-        click.echo("Default configuration file created at matrix.yaml")
+            sys.exit(1)
+        config_path.write_text(ConfigFile.default_config_yaml(json_schema))
+        click.echo(f"Default configuration file created at {CONFIG_FILENAME}")
+        if json_schema:
+            # The schema is derived from the models, so it is always refreshed.
+            schema_path.write_text(
+                json.dumps(ConfigFile.json_schema(), indent=2) + "\n"
+            )
+            click.echo(f"JSON Schema written to {SCHEMA_FILENAME}")
         sys.exit(0)

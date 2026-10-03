@@ -62,7 +62,9 @@ class TagRouter(FileRouter):
         )
 
         criteria = [
-            (k, v) for entry in self.matrix_config.mp3_files for k, v in entry.items()
+            (k, v)
+            for entry in self.matrix_config.mp3_files
+            for k, v in entry.model_dump(exclude_none=True).items()
         ]
 
         mp3_paths = [

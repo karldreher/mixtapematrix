@@ -1,7 +1,7 @@
 # Project stuff
 *.mp3
 matrix.yaml
-
+matrix.schema.json
 
 # Allow the test file.
 !test/matrix.yaml
