@@ -24,7 +24,7 @@ def isolated_cache_dir(tmp_path, monkeypatch):
 @fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     """The single-instance lock is taken on the home directory; isolate it per test
-    so tests never contend with each other or with a real mmatrix run."""
+    so tests never contend with each other or with a real mixtape run."""
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))

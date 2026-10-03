@@ -1,4 +1,4 @@
-"""Single-instance lock: detects another mmatrix process running at the same time."""
+"""Single-instance lock: detects another mixtape process running at the same time."""
 
 import os
 import sys
@@ -21,7 +21,7 @@ class LockError(RuntimeError):
 
 class AlreadyRunningError(LockError):
     def __init__(self):
-        super().__init__("Another mmatrix instance is already running.")
+        super().__init__("Another mixtape instance is already running.")
 
 
 @contextmanager
