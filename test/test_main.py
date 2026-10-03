@@ -134,3 +134,10 @@ def test_init_force_overwrites(tmp_path, monkeypatch):
     assert runner.invoke(cli, ["init", "--force"]).exit_code == 0
     assert "source_path" in (tmp_path / "matrix.yaml").read_text()
     assert (tmp_path / "matrix.schema.json").exists()
+
+
+@pytest.mark.parametrize("json_schema", [True, False])
+def test_default_config_yaml_validates_against_schema(json_schema):
+    data = yaml.safe_load(ConfigFile.default_config_yaml(json_schema=json_schema))
+    Draft202012Validator(ConfigFile.json_schema()).validate(data)
+    ConfigFile.model_validate(data)
