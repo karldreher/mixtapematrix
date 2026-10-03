@@ -60,7 +60,12 @@ Two options leave files out, and they work at different levels:
 - `exclude_paths` (per matrix) works on **locations**. Each entry is a directory or file, and everything beneath it is skipped without being read. A plain entry matches whole path components, so `rock` never excludes `Crockett`, and relative paths work however `source_path` is written. Plain entries must exist. An entry may end in `**` to match by prefix: `/music/rock**` skips everything whose path starts with `/music/rock` (including `rockabilly`), and `/music/rock/**` skips everything beneath `/music/rock`. `**` is only supported at the end of an entry, and glob entries need not exist.
 - `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists.
 
-Matching uses one rule everywhere: an entry or `exclude:` block matches when **any** tag it lists matches (case-insensitive). A file is copied when it matches **at least one** entry and that entry's `exclude:` does not match. An exception in one entry never removes a file that another entry matches. An entry needs at least one tag of its own, so "everything except X" is not supported.
+Excludes are applied in order, path first and then tag:
+
+1. **Path:** a file under an `exclude_paths` entry is dropped for the whole matrix. No `mp3_files` entry can bring it back, whatever its tags say. Use this to keep something out for good, such as a `Huey Luis` folder whose tracks would otherwise be caught by `genre: pop`.
+2. **Tag:** each remaining file is tested against every `mp3_files` entry. An entry or `exclude:` block matches when **any** tag it lists matches (case-insensitive). An entry's `exclude:` only carves exceptions out of that entry, so one entry's exception never removes a file another entry matches.
+
+A file is copied when it matches at least one entry and no exclude applies (by path or by tag). An entry needs at least one tag of its own, so "everything except X" is not supported.
 
 `exclude:` is applied to cached tags, so adding or changing one never invalidates the tag cache.
 
