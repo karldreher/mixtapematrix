@@ -42,8 +42,11 @@ def _bar(label: str, total: int):
     with click.progressbar(
         length=total,
         label=label,
-        fill_char="█",
+        fill_char=click.style("█", fg="green"),
         empty_char="░",
+        show_pos=True,
+        show_percent=True,
+        show_eta=True,
         bar_template="%(label)s  %(bar)s  %(info)s",
         file=sys.stderr,
     ) as bar:

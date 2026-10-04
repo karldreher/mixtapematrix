@@ -83,6 +83,8 @@ def test_bar_drawn_on_a_terminal(monkeypatch):
         bar.update(2)
     drawn = sys.stderr.getvalue()
     assert "Copying" in drawn and "█" in drawn
+    assert "\x1b[32m" in drawn  # dark green fill
+    assert "2/2" in drawn and "100%" in drawn
 
 
 def test_discovery_bar_counts_cache_misses(tmp_path):
