@@ -138,7 +138,9 @@ class TagRouter(FileRouter):
         found = self._discover_tags(mp3_paths)
         for file_path in mp3_paths:
             _, tags = found.get(os.path.relpath(file_path, source_path), (0, None))
-            if tags and any(
+            if tags is None:
+                continue  # No ID3 tag: this tool only works with tagged files.
+            if any(
                 _entry_matches(tags, entry) for entry in self.matrix_config.mp3_files
             ):
                 yield File(path=file_path)
