@@ -37,8 +37,13 @@ def terminal_progress(label: str, total: int) -> AbstractContextManager[Bar]:
     return _bar(label, total)
 
 
+# click ends a finished bar with a newline; step back up and erase that line.
+_ERASE_FINISHED_BAR = "\x1b[1A\r\x1b[2K"
+
+
 @contextmanager
 def _bar(label: str, total: int):
+    """The bar is erased, label included, once the work finishes."""
     with click.progressbar(
         length=total,
         label=label,
@@ -48,3 +53,5 @@ def _bar(label: str, total: int):
         file=sys.stderr,
     ) as bar:
         yield bar
+    sys.stderr.write(_ERASE_FINISHED_BAR)
+    sys.stderr.flush()
