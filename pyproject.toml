@@ -57,6 +57,9 @@ omit = [".venv*", "test/*", "*__init__*"]
 [tool.semantic_release]
 version_variables = ["mixtapematrix/__init__.py:__version__"]
 version_toml = ["pyproject.toml:project.version"]
+# Re-lock after the version bump so uv.lock records the new package version,
+# and stage it so it lands in the release commit.
+build_command = "uv lock && git add uv.lock"
 
 [tool.semantic_release.branches.main]
 match = "(main|master)"
