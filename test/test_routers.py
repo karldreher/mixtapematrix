@@ -341,3 +341,18 @@ def test_tag_warnings_shown_when_verbose(capsys):
         assert "Non standard genre name: X" in capsys.readouterr().err
     finally:
         configure_tag_logging(verbose=False)
+
+
+def test_verbose_tag_warnings_name_the_file(tmp_path, capsys):
+    from mixtapematrix.routers import mp3_router
+
+    path = tmp_path / "quirky.mp3"
+    make_mp3(path, artist="A")
+    configure_tag_logging(verbose=True)
+    try:
+        token = mp3_router._current_file.set(str(path))
+        logging.getLogger("eyed3.id3.tag").warning("Invalid date: 0106")
+        mp3_router._current_file.reset(token)
+        assert f"{path}: Invalid date: 0106" in capsys.readouterr().err
+    finally:
+        configure_tag_logging(verbose=False)
