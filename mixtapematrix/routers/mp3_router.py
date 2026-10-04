@@ -17,8 +17,13 @@ _current_file: ContextVar[str | None] = ContextVar("current_file", default=None)
 
 
 class _FilePrefix(logging.Filter):
+    """Prefixes each eyed3 log record with the file being read on this thread."""
+
     def filter(self, record: logging.LogRecord) -> bool:
+        """Rewrite the record's message in place; always lets the record through."""
         if path := _current_file.get():
+            # Bake the formatted message into msg and clear args, so the handler
+            # does not apply %-formatting a second time.
             record.msg, record.args = f"{path}: {record.getMessage()}", None
         return True
 
