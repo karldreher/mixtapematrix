@@ -1,9 +1,11 @@
+import logging
 import os
 import struct
 
 import pytest
 
 from mixtapematrix.routers.files import File
+from mixtapematrix.routers.mp3_router import configure_tag_logging
 
 
 def test_file(mkdirs):
@@ -323,3 +325,34 @@ def test_glob_exclude_need_not_exist(tmp_path, genres_tree):
         tmp_path, genres_tree, [{"artist": "Alpha"}], False, [f"{genres_tree}/nope/**"]
     )
     assert len(matched(router)) == 4
+
+
+def test_tag_warnings_are_silent_by_default(capsys):
+    configure_tag_logging(verbose=False)
+    logging.getLogger("eyed3.id3.tag").warning("Non standard genre name: Dance & DJ")
+    captured = capsys.readouterr()
+    assert captured.out == "" and captured.err == ""
+
+
+def test_tag_warnings_shown_when_verbose(capsys):
+    configure_tag_logging(verbose=True)
+    try:
+        logging.getLogger("eyed3.id3.tag").warning("Non standard genre name: X")
+        assert "Non standard genre name: X" in capsys.readouterr().err
+    finally:
+        configure_tag_logging(verbose=False)
+
+
+def test_verbose_tag_warnings_name_the_file(tmp_path, capsys):
+    from mixtapematrix.routers import mp3_router
+
+    path = tmp_path / "quirky.mp3"
+    make_mp3(path, artist="A")
+    configure_tag_logging(verbose=True)
+    try:
+        token = mp3_router._current_file.set(str(path))
+        logging.getLogger("eyed3.id3.tag").warning("Invalid date: 0106")
+        mp3_router._current_file.reset(token)
+        assert f"{path}: Invalid date: 0106" in capsys.readouterr().err
+    finally:
+        configure_tag_logging(verbose=False)

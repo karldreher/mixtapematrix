@@ -1,12 +1,49 @@
+import logging
 import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 
 from eyed3.id3 import Genre, Tag
 
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig, Mp3Match
 from .files import File, FileRouter, search_files
+
+_EYED3_LOGGER = logging.getLogger("eyed3")
+_eyed3_handlers: list[logging.Handler] = []
+# The file being parsed on this thread, so every eyed3 message can name it.
+_current_file: ContextVar[str | None] = ContextVar("current_file", default=None)
+
+
+class _FilePrefix(logging.Filter):
+    """Prefixes each eyed3 log record with the file being read on this thread."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Rewrite the record's message in place; always lets the record through."""
+        if path := _current_file.get():
+            # Bake the formatted message into msg and clear args, so the handler
+            # does not apply %-formatting a second time.
+            record.msg, record.args = f"{path}: {record.getMessage()}", None
+        return True
+
+
+def configure_tag_logging(verbose: bool = False) -> None:
+    """
+    eyed3 reports tag quirks (non-standard genres, unparseable dates, unsupported
+    frames) as warnings. They do not stop a tag from being read, so they are shown
+    only when verbose. Genuinely unreadable files still surface via _load_tag.
+    """
+    while _eyed3_handlers:
+        _EYED3_LOGGER.removeHandler(_eyed3_handlers.pop())
+    if verbose:
+        handler = logging.StreamHandler()  # binds the current sys.stderr
+        handler.addFilter(_FilePrefix())
+        _eyed3_handlers.append(handler)
+        _EYED3_LOGGER.addHandler(handler)
+        _EYED3_LOGGER.setLevel(logging.WARNING)
+    else:
+        _EYED3_LOGGER.setLevel(logging.CRITICAL + 1)
 
 
 def _load_tag(path: str) -> Tag | None:
@@ -26,18 +63,24 @@ def _load_tag(path: str) -> Tag | None:
 
 def read_tags(path: str) -> Tags | None:
     """The values of TAG_FIELDS for an MP3, or None if it has no readable tag."""
-    tag = _load_tag(path)
-    if tag is None:
-        return None
-    # Genre is a special case: the tag is a Genre object (or None), compare by name.
-    # isinstance narrows the type: eyed3's setter accepts ints, the getter returns Genre | None.
-    genre = tag.genre
-    return (
-        tag.artist,
-        tag.album,
-        genre.name if isinstance(genre, Genre) else None,
-        tag.album_artist,
-    )
+    # eyed3 parses frames lazily (genre on access), so the file stays current
+    # until the values are read, not just until the parse returns.
+    token = _current_file.set(path)
+    try:
+        tag = _load_tag(path)
+        if tag is None:
+            return None
+        # Genre is a special case: the tag is a Genre object (or None), compare by name.
+        # isinstance narrows the type: eyed3's setter accepts ints, the getter returns Genre | None.
+        genre = tag.genre
+        return (
+            tag.artist,
+            tag.album,
+            genre.name if isinstance(genre, Genre) else None,
+            tag.album_artist,
+        )
+    finally:
+        _current_file.reset(token)
 
 
 def _tag_matches(tags: Tags, key: str, value: str) -> bool:
@@ -117,7 +160,9 @@ class TagRouter(FileRouter):
         found = self._discover_tags(mp3_paths)
         for file_path in mp3_paths:
             _, tags = found.get(os.path.relpath(file_path, source_path), (0, None))
-            if tags and any(
+            if tags is None:
+                continue  # No ID3 tag: this tool only works with tagged files.
+            if any(
                 _entry_matches(tags, entry) for entry in self.matrix_config.mp3_files
             ):
                 yield File(path=file_path)
