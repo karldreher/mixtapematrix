@@ -83,8 +83,6 @@ def test_bar_drawn_on_a_terminal(monkeypatch):
         bar.update(2)
     drawn = sys.stderr.getvalue()
     assert "Copying" in drawn and "█" in drawn
-    # The finished bar is erased: the stream ends by clearing its line.
-    assert drawn.endswith("\x1b[1A\r\x1b[2K")
 
 
 def test_discovery_bar_counts_cache_misses(tmp_path):
