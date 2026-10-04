@@ -1,3 +1,4 @@
+import logging
 import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
@@ -7,6 +8,26 @@ from eyed3.id3 import Genre, Tag
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig, Mp3Match
 from .files import File, FileRouter, search_files
+
+_EYED3_LOGGER = logging.getLogger("eyed3")
+_eyed3_handlers: list[logging.Handler] = []
+
+
+def configure_tag_logging(verbose: bool = False) -> None:
+    """
+    eyed3 reports tag quirks (non-standard genres, unparseable dates, unsupported
+    frames) as warnings. They do not stop a tag from being read, so they are shown
+    only when verbose. Genuinely unreadable files still surface via _load_tag.
+    """
+    while _eyed3_handlers:
+        _EYED3_LOGGER.removeHandler(_eyed3_handlers.pop())
+    if verbose:
+        handler = logging.StreamHandler()  # binds the current sys.stderr
+        _eyed3_handlers.append(handler)
+        _EYED3_LOGGER.addHandler(handler)
+        _EYED3_LOGGER.setLevel(logging.WARNING)
+    else:
+        _EYED3_LOGGER.setLevel(logging.CRITICAL + 1)
 
 
 def _load_tag(path: str) -> Tag | None:

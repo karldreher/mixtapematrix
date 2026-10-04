@@ -8,7 +8,7 @@ from .cache import TagCache, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
 from .routers.files import destination_path, paths_overlap, prune_destination
-from .routers.mp3_router import TagRouter
+from .routers.mp3_router import TagRouter, configure_tag_logging
 
 
 def _format_bytes(size: float) -> str:
@@ -25,10 +25,12 @@ class MixtapeMatrix:
         debug: bool = False,
         use_cache: bool = True,
         prune: bool = False,
+        verbose: bool = False,
     ):
         self.config = config
         self.use_cache = use_cache
         self.prune = prune
+        self.verbose = verbose
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
 
@@ -62,6 +64,7 @@ class MixtapeMatrix:
                     )
 
     def run(self):
+        configure_tag_logging(self.verbose)
         if self.prune:
             self._check_prune_safe()
         # Destinations can be shared between matrices, so pruning waits until
@@ -111,15 +114,26 @@ def cli(ctx):
 @cli.command()
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
 @click.option("--debug", help="Enable debug logging", is_flag=True)
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
+)
 @click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
 @click.option(
     "--prune",
     is_flag=True,
     help="Delete destination files that no matrix copied (off by default)",
 )
-def run(config, debug, no_cache, prune):
+def run(config, debug, verbose, no_cache, prune):
     """Run the matrix described by a configuration file."""
-    MixtapeMatrix(config=config, debug=debug, use_cache=not no_cache, prune=prune).run()
+    MixtapeMatrix(
+        config=config,
+        debug=debug,
+        verbose=verbose,
+        use_cache=not no_cache,
+        prune=prune,
+    ).run()
 
 
 @cli.command()
