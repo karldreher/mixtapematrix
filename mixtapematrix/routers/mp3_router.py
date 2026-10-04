@@ -4,10 +4,12 @@ from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 
+import click
 from eyed3.id3 import Genre, Tag
 
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig, Mp3Match
+from ..progress import ProgressFactory, no_progress
 from .files import File, FileRouter, search_files
 
 _EYED3_LOGGER = logging.getLogger("eyed3")
@@ -57,7 +59,7 @@ def _load_tag(path: str) -> Tag | None:
     except Exception as e:  # noqa: BLE001
         # eyed3 can raise almost anything on a malformed tag (struct.error,
         # IndexError, ...). One bad file must not abort the whole scan.
-        print(f"Error loading {path}: {e}")
+        click.echo(f"Error loading {path}: {e}")
         return None
 
 
@@ -101,9 +103,15 @@ def _entry_matches(tags: Tags, entry: Mp3Match) -> bool:
 
 
 class TagRouter(FileRouter):
-    def __init__(self, matrix_config: MatrixConfig, cache: TagCache | None = None):
+    def __init__(
+        self,
+        matrix_config: MatrixConfig,
+        cache: TagCache | None = None,
+        progress: ProgressFactory = no_progress,
+    ):
         self.matrix_config = matrix_config
         self.cache = cache
+        self.progress = progress
 
     def _discover_tags(self, mp3_paths: list[str]) -> dict[str, Entry]:
         """
@@ -118,7 +126,7 @@ class TagRouter(FileRouter):
             try:
                 mtime = os.stat(path).st_mtime_ns
             except OSError as e:
-                print(f"Error reading {path}: {e}")
+                click.echo(f"Error reading {path}: {e}")
                 continue
             hit = cached.get(os.path.relpath(path, root))
             if hit and hit[0] == mtime:
@@ -127,10 +135,12 @@ class TagRouter(FileRouter):
                 misses.append((path, mtime))
 
         # Tag reads are I/O-bound, so overlap them; map() preserves input order.
-        with ThreadPoolExecutor() as pool:
+        label = f"Discovering files in {root}"
+        with ThreadPoolExecutor() as pool, self.progress(label, len(misses)) as bar:
             read = pool.map(lambda miss: read_tags(miss[0]), misses)
             for (path, mtime), tags in zip(misses, read, strict=True):
                 found[os.path.relpath(path, root)] = (mtime, tags)
+                bar.update(1)
 
         if self.cache and (misses or found.keys() != cached.keys()):
             self.cache.save(found)

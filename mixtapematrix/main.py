@@ -7,6 +7,7 @@ import yaml
 from .cache import TagCache, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
+from .progress import no_progress, terminal_progress
 from .routers.files import destination_path, paths_overlap, prune_destination
 from .routers.mp3_router import TagRouter, configure_tag_logging
 
@@ -33,6 +34,8 @@ class MixtapeMatrix:
         self.verbose = verbose
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
+        # Log lines would tear an active bar, so verbose and debug runs show none.
+        self.progress = no_progress if (verbose or debug) else terminal_progress
 
     @cached_property
     def config_data(self) -> ConfigFile:
@@ -70,20 +73,32 @@ class MixtapeMatrix:
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}
         for matrix_config in self.config_data.matrix:
-            router = TagRouter(matrix_config, cache=self.tag_cache(matrix_config))
+            router = TagRouter(
+                matrix_config,
+                cache=self.tag_cache(matrix_config),
+                progress=self.progress,
+            )
             kept = keep.setdefault(matrix_config.destination.path, set())
-            for file in router.source:
-                self.debug(f"Copying {file.path} to {matrix_config.destination.path}")
-                # TODO: not terribly optimized and could be invalid based on
-                # attribute decisions at class level
-                TagRouter.deeply_copy(
-                    file, matrix_config.source, matrix_config.destination
-                )
-                kept.add(
-                    destination_path(
+            # Listing first runs tag discovery (and its bar) to completion, and
+            # gives the copy bar a total.
+            files = list(router.source)
+            label = f"Copying files from {matrix_config.source.path}"
+            with self.progress(label, len(files)) as bar:
+                for file in files:
+                    self.debug(
+                        f"Copying {file.path} to {matrix_config.destination.path}"
+                    )
+                    # TODO: not terribly optimized and could be invalid based on
+                    # attribute decisions at class level
+                    TagRouter.deeply_copy(
                         file, matrix_config.source, matrix_config.destination
                     )
-                )
+                    kept.add(
+                        destination_path(
+                            file, matrix_config.source, matrix_config.destination
+                        )
+                    )
+                    bar.update(1)
         if self.prune:
             for root, kept in keep.items():
                 for path in prune_destination(root, kept):
