@@ -26,15 +26,26 @@ def no_progress(label: str, total: int) -> AbstractContextManager[Bar]:
     return nullcontext(_NoBar())
 
 
-def terminal_progress(label: str, total: int) -> AbstractContextManager[Bar]:
+class TerminalProgress:
     """
-    A progress bar on stderr, shown only when there is work to track (total > 0)
+    Progress bars on stderr, shown only when there is work to track (total > 0)
     and stderr is a terminal. Redirected or piped runs get no output at all, where
     click.progressbar alone would still print the label.
+
+    One instance serves a whole run: it remembers whether a bar was already drawn,
+    so a blank line separates consecutive bars and never appears around a lone one.
     """
-    if total <= 0 or not sys.stderr.isatty():
-        return no_progress(label, total)
-    return _bar(label, total)
+
+    def __init__(self) -> None:
+        self._drawn = False
+
+    def __call__(self, label: str, total: int) -> AbstractContextManager[Bar]:
+        if total <= 0 or not sys.stderr.isatty():
+            return no_progress(label, total)
+        if self._drawn:
+            click.echo(err=True)
+        self._drawn = True
+        return _bar(label, total)
 
 
 @contextmanager

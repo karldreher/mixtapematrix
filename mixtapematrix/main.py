@@ -7,7 +7,7 @@ import yaml
 from .cache import TagCache, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
-from .progress import no_progress, terminal_progress
+from .progress import TerminalProgress, no_progress
 from .routers.files import destination_path, paths_overlap, prune_destination
 from .routers.mp3_router import TagRouter, configure_tag_logging
 
@@ -35,7 +35,7 @@ class MixtapeMatrix:
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
         # Log lines would tear an active bar, so verbose and debug runs show none.
-        self.progress = no_progress if (verbose or debug) else terminal_progress
+        self.progress = no_progress if (verbose or debug) else TerminalProgress()
 
     @cached_property
     def config_data(self) -> ConfigFile:

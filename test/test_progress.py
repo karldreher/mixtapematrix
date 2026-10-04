@@ -9,7 +9,7 @@ from eyed3.id3 import Tag
 
 from mixtapematrix import main
 from mixtapematrix.main import cli
-from mixtapematrix.progress import terminal_progress
+from mixtapematrix.progress import TerminalProgress
 
 
 class FakeTty(io.StringIO):
@@ -64,7 +64,7 @@ def recording_factory(calls):
 
 
 def test_bar_hidden_when_stderr_is_not_a_terminal(capsys):
-    with terminal_progress("Copying", 3) as bar:
+    with TerminalProgress()("Copying", 3) as bar:
         bar.update(1)
     captured = capsys.readouterr()
     assert captured.out == "" and captured.err == ""
@@ -72,19 +72,42 @@ def test_bar_hidden_when_stderr_is_not_a_terminal(capsys):
 
 def test_bar_hidden_when_there_is_no_work(monkeypatch):
     monkeypatch.setattr(sys, "stderr", FakeTty())
-    with terminal_progress("Copying", 0) as bar:
+    with TerminalProgress()("Copying", 0) as bar:
         bar.update(0)
     assert sys.stderr.getvalue() == ""
 
 
 def test_bar_drawn_on_a_terminal(monkeypatch):
     monkeypatch.setattr(sys, "stderr", FakeTty())
-    with terminal_progress("Copying", 2) as bar:
+    with TerminalProgress()("Copying", 2) as bar:
         bar.update(2)
     drawn = sys.stderr.getvalue()
     assert "Copying" in drawn and "█" in drawn
     assert "\x1b[32m" in drawn  # dark green fill
     assert "2/2" in drawn and "100%" in drawn
+
+
+def test_blank_line_separates_two_bars_only(monkeypatch):
+    monkeypatch.setattr(sys, "stderr", FakeTty())
+    progress = TerminalProgress()
+    with progress("Discovering", 1) as bar:
+        bar.update(1)
+    assert not sys.stderr.getvalue().startswith("\n")
+    with progress("Copying", 0):  # no work: no bar, no blank line
+        pass
+    before = sys.stderr.getvalue()
+    with progress("Copying", 1) as bar:
+        bar.update(1)
+    added = sys.stderr.getvalue()[len(before) :]
+    assert added.startswith("\n")
+    assert added.count("Copying") >= 1
+
+
+def test_lone_bar_has_no_leading_blank_line(monkeypatch):
+    monkeypatch.setattr(sys, "stderr", FakeTty())
+    with TerminalProgress()("Copying", 1) as bar:
+        bar.update(1)
+    assert not sys.stderr.getvalue().startswith("\n")
 
 
 def test_discovery_bar_counts_cache_misses(tmp_path):
@@ -117,6 +140,6 @@ def test_verbose_and_debug_runs_show_no_bars(tmp_path, flag):
 def main_run(config, calls, *args):
     """Run the CLI with terminal_progress replaced by a recording factory."""
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(main, "terminal_progress", recording_factory(calls))
+        mp.setattr(main, "TerminalProgress", lambda: recording_factory(calls))
         result = CliRunner().invoke(cli, ["run", "--config", str(config), *args])
     assert result.exit_code == 0, result.output
