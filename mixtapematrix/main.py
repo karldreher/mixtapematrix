@@ -52,21 +52,20 @@ class MixtapeMatrix:
             debug=self.debug,
         )
 
-    def _check_prune_safe(self):
-        """Pruning deletes from the destination, so it must not overlap a source."""
+    def _check_destinations_safe(self):
+        """Sources are read-only: no destination may be, or sit inside, any source."""
         for matrix_config in self.config_data.matrix:
             destination = matrix_config.destination.path
             for other in self.config_data.matrix:
                 if paths_overlap(destination, other.source.path):
                     raise click.ClickException(
-                        f"Refusing to prune: destination {destination} overlaps "
+                        f"Refusing to run: destination {destination} overlaps "
                         f"source {other.source.path}."
                     )
 
     def run(self):
         configure_tag_logging(self.verbose)
-        if self.prune:
-            self._check_prune_safe()
+        self._check_destinations_safe()
         # Destinations can be shared between matrices, so pruning waits until
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}

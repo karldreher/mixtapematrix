@@ -310,6 +310,19 @@ def test_run_prune_refuses_destination_overlapping_source(tmp_path):
     assert (tmp_path / "library" / "song.mp3").exists()
 
 
+def test_run_refuses_destination_inside_source_without_prune(tmp_path):
+    config, _ = prune_config(tmp_path)
+    data = yaml.safe_load(config.read_text())
+    nested = tmp_path / "library" / "copies"
+    nested.mkdir()
+    data["matrix"][0]["destination_path"] = str(nested)
+    config.write_text(yaml.safe_dump(data))
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
+    assert result.exit_code != 0
+    assert "overlaps" in result.output
+    assert list(nested.iterdir()) == []
+
+
 def test_legacy_exclude_path_rejected_with_migration_message():
     with pytest.raises(ValueError, match="exclude_paths") as error:
         ConfigFile.model_validate(
