@@ -1,10 +1,11 @@
 import subprocess
+from collections.abc import Iterator
 from functools import cached_property
 
 import click
 import yaml
 
-from .cache import TAG_FIELDS, TagCache, clean_cache, parse_ttl
+from .cache import TAG_FIELDS, TagCache, Tags, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
@@ -72,25 +73,33 @@ class MixtapeMatrix:
                         f"source {other.source.path}."
                     )
 
-    def list_tag(self, field: str, where: dict[str, str] | None = None) -> list[str]:
+    def _entries(self, where: list[tuple[str, str]]) -> Iterator[tuple[str, Tags]]:
         """
-        Distinct values of a tag across every matrix source, sorted. `where` maps
-        tag names to values; only files matching every one (case-insensitive) count.
+        (path, tags) of every tagged MP3 in every matrix source, ignoring the matrix
+        mp3_files filters. `where` pairs tag names with values; only files matching
+        every pair (case-insensitive) are yielded.
         """
         configure_tag_logging(self.verbose)
-        index = TAG_FIELDS.index(field)
-        spellings: dict[str, set[str]] = {}  # casefolded -> every spelling seen
         for matrix_config in self.config_data.matrix:
             router = TagRouter(
                 matrix_config,
                 cache=self.tag_cache(matrix_config),
                 progress=self.progress,
             )
-            for tags in router.tags():
-                if not all(_tag_matches(tags, k, v) for k, v in (where or {}).items()):
-                    continue
-                if value := tags[index]:
-                    spellings.setdefault(value.casefold(), set()).add(value)
+            for path, tags in router.entries():
+                if all(_tag_matches(tags, k, v) for k, v in where):
+                    yield path, tags
+
+    def list_tag(self, field: str, where: dict[str, str] | None = None) -> list[str]:
+        """
+        Distinct values of a tag across every matrix source, sorted. `where` maps
+        tag names to values; only files matching every one (case-insensitive) count.
+        """
+        index = TAG_FIELDS.index(field)
+        spellings: dict[str, set[str]] = {}  # casefolded -> every spelling seen
+        for _, tags in self._entries(list((where or {}).items())):
+            if value := tags[index]:
+                spellings.setdefault(value.casefold(), set()).add(value)
         # min() picks the same spelling whatever order the filesystem lists files in.
         return [min(spellings[key]) for key in sorted(spellings)]
 
@@ -207,26 +216,50 @@ def _filter_options(func):
     return func
 
 
+def _library_options(func):
+    """The options every command that reads the library shares."""
+    for option in reversed(
+        [
+            click.option(
+                "--config", default="matrix.yaml", help="The YAML configuration file"
+            ),
+            click.option("--debug", help="Enable debug logging", is_flag=True),
+            click.option(
+                "--verbose",
+                is_flag=True,
+                help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
+            ),
+            click.option(
+                "--no-cache", is_flag=True, help="Ignore the tag cache for this run"
+            ),
+        ]
+    ):
+        func = option(func)
+    return func
+
+
+def _filters(options: dict) -> dict[str, str]:
+    """The --<tag> filters that were given, keyed by tag name."""
+    return {
+        name: options[f"filter_{name}"]
+        for name in TAG_FIELDS
+        if options[f"filter_{name}"] is not None
+    }
+
+
 @list_group.command(name="tag")
 @click.argument("field", type=click.Choice(TAG_FIELDS))
 @_filter_options
-@click.option("--config", default="matrix.yaml", help="The YAML configuration file")
-@click.option("--debug", help="Enable debug logging", is_flag=True)
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
-)
-@click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
-def list_tag(field, config, debug, verbose, no_cache, **filters):
+@_library_options
+def list_tag(field, config, debug, verbose, no_cache, **options):
     """List distinct values of a tag.
 
     FIELD is one of artist, album, genre or album_artist. Prints each distinct
     value found in every matrix source in the config, one per line, sorted
     case-insensitively. Values that differ only by case are listed once, using
-    the spelling that sorts first (uppercase before lowercase). Files with no ID3 tag, or with no value for FIELD,
-    are skipped. The matrix mp3_files filters are ignored, so the whole library
-    is listed.
+    the spelling that sorts first (uppercase before lowercase). Files with no
+    ID3 tag, or with no value for FIELD, are skipped. The matrix mp3_files
+    filters are ignored, so the whole library is listed.
 
     Narrow the result with --artist, --album, --genre or --album-artist. Each
     matches case-insensitively and exactly, like mp3_files, and several filters
@@ -247,14 +280,7 @@ def list_tag(field, config, debug, verbose, no_cache, **filters):
     """
     values = MixtapeMatrix(
         config=config, debug=debug, verbose=verbose, use_cache=not no_cache
-    ).list_tag(
-        field,
-        where={
-            name: filters[f"filter_{name}"]
-            for name in TAG_FIELDS
-            if filters[f"filter_{name}"] is not None
-        },
-    )
+    ).list_tag(field, where=_filters(options))
     for value in values:
         click.echo(value)
 

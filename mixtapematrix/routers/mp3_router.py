@@ -161,15 +161,15 @@ class TagRouter(FileRouter):
             if p.lower().endswith(".mp3")
         ]
 
-    def tags(self) -> Iterator[Tags]:
+    def entries(self) -> Iterator[tuple[str, Tags]]:
         """
-        The tags of every tagged MP3 in the source, regardless of the matrix filters.
-        Served from the tag cache when valid; discovery refills it otherwise.
+        (path relative to the source, tags) of every tagged MP3, regardless of the
+        matrix filters. Served from the tag cache when valid; discovery refills it.
         """
         found = self._discover_tags(self._mp3_paths())
-        for _, tags in found.values():
+        for path, (_, tags) in found.items():
             if tags is not None:
-                yield tags
+                yield path, tags
 
     @property
     def source(self) -> Generator[File]:
