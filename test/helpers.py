@@ -14,13 +14,18 @@ def make_mp3(path, **tags):
         tag.save(str(path))
 
 
-def write_config(tmp_path, sources, cache=True):
+def write_config(tmp_path, sources, cache=True, exclude_paths=None):
     data = {
         "matrix": [
             {
                 "source_path": str(source),
                 "destination_path": str(tmp_path / f"out{i}"),
                 "mp3_files": [{"artist": "nobody"}],  # list ignores matrix filters
+                **(
+                    {"exclude_paths": [str(p) for p in exclude_paths]}
+                    if exclude_paths
+                    else {}
+                ),
             }
             for i, source in enumerate(sources)
         ]
@@ -32,3 +37,10 @@ def write_config(tmp_path, sources, cache=True):
     config = tmp_path / "matrix.yaml"
     config.write_text(yaml.safe_dump(data))
     return config
+
+
+def cache_files(tmp_path):
+    """Every file in the test's tag cache directory, with its bytes."""
+    return {
+        p: p.read_bytes() for p in (tmp_path / "xdg-cache").rglob("*") if p.is_file()
+    }

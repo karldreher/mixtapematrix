@@ -94,12 +94,13 @@ mixtape list tag genre
 # Narrow with --artist, --album, --genre, --album-artist (exact, case-insensitive; all must match):
 mixtape list tag album --artist Alpha
 mixtape list tag artist --genre funk --album-artist Alpha
+# Use --refresh to rescan the library instead of reading the cache as is.
 # Prints the distinct values from every matrix source, one per line, sorted and case-insensitive.
 # Use --config to point at a file other than ./matrix.yaml
 # Use --no-cache to ignore the tag cache for one run.
 ```
 
-`list tag` ignores `mp3_files` and reads from the same tag cache as `run`: valid entries are reused and anything missing is discovered and cached for the next run.
+`list tag` ignores `mp3_files`. It reads a valid tag cache as is, without scanning the library, which makes repeat runs fast. Files added, deleted or retagged since the cache was written do not show up until you pass `--refresh` (rescan and rewrite the cache), run `mixtape run`, or the cache expires. Without a valid cache it scans the library and fills the cache. `--no-cache` reads every file and leaves the cache alone.
 
 ## Describe the library as a tree
 
@@ -137,7 +138,7 @@ Funk
 - Matching is exact and case-insensitive, like `mp3_files`. The `--artist`, `--album`, `--genre` and `--album-artist` filters work as in `list tag` and narrow which files are described.
 - Names that differ only by case share one node and use the spelling that sorts first.
 - A missing artist or album shows as `(unknown artist)` or `(unknown album)`. Files with no ID3 tag are skipped, as are files with no genre or album_artist when that is the top level.
-- Like `list tag`, it ignores `mp3_files` and uses the tag cache. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
+- Like `list tag`, it ignores `mp3_files` and reads a valid tag cache as is, so results can be stale until you pass `--refresh`. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
 
 ### Find untagged files
 
@@ -147,7 +148,7 @@ mixtape describe untagged
 
 Prints the full path of every MP3 with no ID3 tag, one per line, sorted. It takes no tag filters, since an untagged file has no tags to filter on. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
 
-The tag cache is used only to skip files it records as tagged and unchanged. Files missing from the cache, and files it records as untagged, are read again. The cache is never written, so this command cannot leave a partial cache behind.
+`describe untagged` always scans the library, because it needs files the cache does not list. The tag cache is used only to skip files it records as tagged and unchanged. Files missing from the cache, and files it records as untagged, are read again. The cache is never written, so this command cannot leave a partial cache behind.
 
 ## Speed up repeat runs with a tag cache
 

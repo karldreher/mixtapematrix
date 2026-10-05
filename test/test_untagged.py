@@ -3,7 +3,7 @@ import os
 import pytest
 from click.testing import CliRunner
 from eyed3.id3 import Tag
-from helpers import make_mp3, write_config
+from helpers import cache_files, make_mp3, write_config
 
 from mixtapematrix.main import cli
 from mixtapematrix.routers import mp3_router
@@ -30,12 +30,6 @@ def read_counter(monkeypatch):
 
     monkeypatch.setattr(mp3_router, "read_tags", counting)
     return calls
-
-
-def cache_files(tmp_path):
-    return {
-        p: p.read_bytes() for p in (tmp_path / "xdg-cache").rglob("*") if p.is_file()
-    }
 
 
 def untagged(tmp_path, library, *args):
