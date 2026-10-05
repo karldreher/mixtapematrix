@@ -220,7 +220,7 @@ class TagRouter(FileRouter):
 
     def untagged(self) -> list[str]:
         """
-        Absolute, sorted paths of every MP3 that has no readable ID3 tag.
+        Absolute paths, in no particular order, of every MP3 that has no readable ID3 tag.
 
         The tag cache is used here only to skip files, never to answer: a file whose
         cache entry still matches its mtime and holds tags is known to be tagged, so
@@ -251,7 +251,7 @@ class TagRouter(FileRouter):
                 if tags is None:
                     found.append(os.path.abspath(path))
                 bar.update(1)
-        return sorted(found, key=str.casefold)
+        return found
 
     @property
     def source(self) -> Generator[File]:
