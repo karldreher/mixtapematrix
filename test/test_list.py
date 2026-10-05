@@ -114,3 +114,37 @@ def test_no_cache_reads_every_file(tmp_path, library, read_counter):
 def test_list_group_appears_in_help():
     result = CliRunner().invoke(cli, [])
     assert "list" in result.output
+
+
+def test_filters_by_a_second_tag(tmp_path, library):
+    config = write_config(tmp_path, [library])
+    assert list_tag(config, "album", "--artist", "alpha") == ["Second", "Third"]
+    assert list_tag(config, "artist", "--genre", "FUNK") == ["ALPHA", "beta"]
+
+
+def test_filters_combine_with_and(tmp_path, library):
+    config = write_config(tmp_path, [library])
+    args = ["--artist", "Alpha", "--genre", "Metal"]
+    assert list_tag(config, "album", *args) == ["Second"]
+
+
+def test_filter_with_no_matches_prints_nothing(tmp_path, library):
+    config = write_config(tmp_path, [library])
+    assert list_tag(config, "album", "--artist", "Nobody") == []
+
+
+def test_album_artist_filter_accepts_both_spellings(tmp_path):
+    root = tmp_path / "library"
+    make_mp3(root / "a.mp3", artist="One", album_artist="Various", album="Mix")
+    make_mp3(root / "b.mp3", artist="Two", album_artist="Other", album="Solo")
+    config = write_config(tmp_path, [root])
+    assert list_tag(config, "album", "--album-artist", "various") == ["Mix"]
+    assert list_tag(config, "album", "--album_artist", "various") == ["Mix"]
+
+
+def test_filtering_does_not_bypass_the_cache(tmp_path, library, read_counter):
+    config = write_config(tmp_path, [library])
+    list_tag(config, "artist")
+    read_counter.clear()
+    list_tag(config, "album", "--artist", "Alpha")
+    assert read_counter == []

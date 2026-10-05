@@ -89,6 +89,9 @@ See which values exist in your library before writing `mp3_files` entries:
 mixtape list tag artist
 mixtape list tag genre
 # Also: album, album_artist
+# Narrow with --artist, --album, --genre, --album-artist (exact, case-insensitive; all must match):
+mixtape list tag album --artist Alpha
+mixtape list tag artist --genre funk --album-artist Alpha
 # Prints the distinct values from every matrix source, one per line, sorted and case-insensitive.
 # Use --config to point at a file other than ./matrix.yaml
 # Use --no-cache to ignore the tag cache for one run.

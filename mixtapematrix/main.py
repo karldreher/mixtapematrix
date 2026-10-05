@@ -9,7 +9,7 @@ from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
 from .routers.files import destination_path, paths_overlap, prune_destination
-from .routers.mp3_router import TagRouter, configure_tag_logging
+from .routers.mp3_router import TagRouter, _tag_matches, configure_tag_logging
 
 
 def _format_bytes(size: float) -> str:
@@ -72,8 +72,11 @@ class MixtapeMatrix:
                         f"source {other.source.path}."
                     )
 
-    def list_tag(self, field: str) -> list[str]:
-        """Distinct values of a tag across every matrix source, sorted."""
+    def list_tag(self, field: str, where: dict[str, str] | None = None) -> list[str]:
+        """
+        Distinct values of a tag across every matrix source, sorted. `where` maps
+        tag names to values; only files matching every one (case-insensitive) count.
+        """
         configure_tag_logging(self.verbose)
         index = TAG_FIELDS.index(field)
         values: dict[str, str] = {}  # casefolded -> first-seen spelling
@@ -84,6 +87,8 @@ class MixtapeMatrix:
                 progress=self.progress,
             )
             for tags in router.tags():
+                if not all(_tag_matches(tags, k, v) for k, v in (where or {}).items()):
+                    continue
                 if value := tags[index]:
                     values.setdefault(value.casefold(), value)
         return [values[key] for key in sorted(values)]
@@ -189,8 +194,21 @@ def list_group():
     """List information about the music library."""
 
 
+def _filter_options(func):
+    """Adds one --<tag> filter option per tag field, e.g. --artist, --album-artist."""
+    for name in reversed(TAG_FIELDS):
+        flags = {f"--{name.replace('_', '-')}", f"--{name}"}
+        func = click.option(
+            *sorted(flags, reverse=True),
+            f"filter_{name}",
+            help=f"Only count files whose {name} matches (case-insensitive)",
+        )(func)
+    return func
+
+
 @list_group.command(name="tag")
 @click.argument("field", type=click.Choice(TAG_FIELDS))
+@_filter_options
 @click.option("--config", default="matrix.yaml", help="The YAML configuration file")
 @click.option("--debug", help="Enable debug logging", is_flag=True)
 @click.option(
@@ -199,7 +217,7 @@ def list_group():
     help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
 )
 @click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
-def list_tag(field, config, debug, verbose, no_cache):
+def list_tag(field, config, debug, verbose, no_cache, **filters):
     """List distinct values of a tag.
 
     FIELD is one of artist, album, genre or album_artist. Prints each distinct
@@ -209,6 +227,10 @@ def list_tag(field, config, debug, verbose, no_cache):
     are skipped. The matrix mp3_files filters are ignored, so the whole library
     is listed.
 
+    Narrow the result with --artist, --album, --genre or --album-artist. Each
+    matches case-insensitively and exactly, like mp3_files, and several filters
+    must all match. Any tag may filter any other, e.g. albums by one artist.
+
     Tags come from the tag cache when it is valid. Files that are missing from
     the cache or have changed are read and the cache is updated for the next
     run. Use --no-cache to read every file instead. Progress is shown on stderr,
@@ -217,12 +239,21 @@ def list_tag(field, config, debug, verbose, no_cache):
     \b
     Examples:
       mixtape list tag artist
+      mixtape list tag album --artist Alpha
+      mixtape list tag artist --genre funk --album-artist Alpha
       mixtape list tag genre --config other.yaml
       mixtape list tag album_artist --no-cache
     """
     values = MixtapeMatrix(
         config=config, debug=debug, verbose=verbose, use_cache=not no_cache
-    ).list_tag(field)
+    ).list_tag(
+        field,
+        where={
+            name: filters[f"filter_{name}"]
+            for name in TAG_FIELDS
+            if filters[f"filter_{name}"] is not None
+        },
+    )
     for value in values:
         click.echo(value)
 
