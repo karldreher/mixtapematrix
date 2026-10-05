@@ -39,8 +39,14 @@ class MixtapeMatrix:
 
     @cached_property
     def config_data(self) -> ConfigFile:
-        with open(self.config) as f:
-            return ConfigFile.model_validate(yaml.safe_load(f))
+        try:
+            with open(self.config) as f:
+                return ConfigFile.model_validate(yaml.safe_load(f))
+        except FileNotFoundError:
+            raise click.ClickException(
+                f"Config file not found: {self.config}. "
+                "Create one with `mixtape init` or pass --config."
+            ) from None
 
     def tag_cache(self, matrix_config: MatrixConfig) -> TagCache | None:
         """The tag cache for a matrix, or None when caching is off for this run."""

@@ -33,7 +33,7 @@ def test_second_instance_warns_and_proceeds(tmp_path, monkeypatch, args):
     if args[0] == "run":
         # run proceeds to its own work, which fails here only for the missing config
         assert result.exit_code != 0
-        assert isinstance(result.exception, FileNotFoundError)
+        assert "Config file not found: missing.yaml" in result.output
     else:
         assert result.exit_code == 0
     assert (tmp_path / "matrix.yaml").exists() == (args[0] == "init")
