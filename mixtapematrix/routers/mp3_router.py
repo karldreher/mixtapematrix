@@ -171,6 +171,41 @@ class TagRouter(FileRouter):
             if tags is not None:
                 yield os.path.abspath(os.path.join(root, path)), tags
 
+    def untagged(self) -> list[str]:
+        """
+        Absolute, sorted paths of every MP3 that has no readable ID3 tag.
+
+        The tag cache is used here only to skip files, never to answer: a file whose
+        cache entry still matches its mtime and holds tags is known to be tagged, so
+        it is not opened. The cache also records untagged files as (mtime, None), but
+        a recorded "no tag" is not trusted, so those files are read again, as are
+        files missing from the cache. Nothing is written back to the cache: this
+        pass reads only the files that can be untagged, so it is not a complete
+        discovery and must not be saved as one.
+        """
+        root = self.matrix_config.source.path
+        cached = self.cache.load() if self.cache else {}
+        unknown: list[str] = []
+        for path in self._mp3_paths():
+            try:
+                mtime = os.stat(path).st_mtime_ns
+            except OSError as e:
+                click.echo(f"Error reading {path}: {e}")
+                continue
+            hit = cached.get(os.path.relpath(path, root))
+            if hit and hit[0] == mtime and hit[1] is not None:
+                continue  # Cached as tagged and unchanged: cannot be untagged.
+            unknown.append(path)
+
+        label = f"Checking files in {root}"
+        found: list[str] = []
+        with ThreadPoolExecutor() as pool, self.progress(label, len(unknown)) as bar:
+            for path, tags in zip(unknown, pool.map(read_tags, unknown), strict=True):
+                if tags is None:
+                    found.append(os.path.abspath(path))
+                bar.update(1)
+        return sorted(found, key=str.casefold)
+
     @property
     def source(self) -> Generator[File]:
         """

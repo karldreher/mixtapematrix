@@ -119,6 +119,19 @@ class MixtapeMatrix:
             pairs.append((field, value))
         return list(describe(self._entries(pairs), field))
 
+    def describe_untagged(self) -> list[str]:
+        """Every MP3 with no readable ID3 tag across the matrix sources, sorted."""
+        configure_tag_logging(self.verbose)
+        found: set[str] = set()
+        for matrix_config in self.config_data.matrix:
+            router = TagRouter(
+                matrix_config,
+                cache=self.tag_cache(matrix_config),
+                progress=self.progress,
+            )
+            found.update(router.untagged())
+        return sorted(found, key=str.casefold)
+
     def run(self):
         configure_tag_logging(self.verbose)
         self._check_destinations_safe()
@@ -312,7 +325,7 @@ def describe_group():
 @_filter_options
 @_library_options
 def describe_tag(field, value, config, debug, verbose, no_cache, **options):
-    """Show a tag's values as a tree: the tag, then the rest of artist > album > song.
+    """Show a tag's values as a tree.
 
     The tag you choose is the top level. Below it comes whatever is left of
     artist > album > song (a song is shown as the full path of its file):
@@ -350,6 +363,33 @@ def describe_tag(field, value, config, debug, verbose, no_cache, **options):
     ).describe_tag(field, value, where=_filters(options))
     for line in lines:
         click.echo(line)
+
+
+@describe_group.command(name="untagged")
+@_library_options
+def describe_untagged(config, debug, verbose, no_cache):
+    """List MP3 files that have no ID3 tag.
+
+    Prints the full path of every untagged MP3 in every matrix source in the
+    config, one per line, sorted case-insensitively. Unlike the tag commands, it
+    takes no tag filters, since an untagged file has no tags to filter on. The
+    matrix mp3_files filters are ignored, and exclude_paths still apply.
+
+    The tag cache is only used to skip files it already records as tagged and
+    unchanged. Files the cache does not list, and files it lists as untagged, are
+    read again, and the cache is never written. Use --no-cache to read every
+    file. Progress is shown on stderr, so output can be piped.
+
+    \b
+    Examples:
+      mixtape describe untagged
+      mixtape describe untagged --config other.yaml
+      mixtape describe untagged --no-cache
+    """
+    for path in MixtapeMatrix(
+        config=config, debug=debug, verbose=verbose, use_cache=not no_cache
+    ).describe_untagged():
+        click.echo(path)
 
 
 @cli.group(name="cache")

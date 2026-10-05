@@ -139,6 +139,16 @@ Funk
 - A missing artist or album shows as `(unknown artist)` or `(unknown album)`. Files with no ID3 tag are skipped, as are files with no genre or album_artist when that is the top level.
 - Like `list tag`, it ignores `mp3_files` and uses the tag cache. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
 
+### Find untagged files
+
+```
+mixtape describe untagged
+```
+
+Prints the full path of every MP3 with no ID3 tag, one per line, sorted. It takes no tag filters, since an untagged file has no tags to filter on. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
+
+The tag cache is used only to skip files it records as tagged and unchanged. Files missing from the cache, and files it records as untagged, are read again. The cache is never written, so this command cannot leave a partial cache behind.
+
 ## Speed up repeat runs with a tag cache
 
 Reading the ID3 tag of every MP3 is the slow part of a run. Add a `cache` block to cache the discovered tags between runs:
