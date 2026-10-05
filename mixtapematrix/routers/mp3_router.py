@@ -182,7 +182,7 @@ class TagRouter(FileRouter):
         return self._from_cache(cached)
 
     def _from_cache(self, cached: dict[str, Entry]) -> Iterator[tuple[str, Tags]]:
-        root = self.matrix_config.source.path
+        root = os.path.abspath(self.matrix_config.source.path)  # so paths join absolute
         is_excluded = make_exclusion_test(self.matrix_config.exclude_paths)
         dirs: dict[str, bool] = {"": False}  # relative dir -> excluded, by memo
 
@@ -201,7 +201,7 @@ class TagRouter(FileRouter):
             path = os.path.join(root, rel)
             if dir_excluded(os.path.dirname(rel)) or is_excluded(path, False):
                 continue
-            yield os.path.abspath(path), tags
+            yield path, tags
 
     def entries(self, refresh: bool = False) -> Iterator[tuple[str, Tags]]:
         """
