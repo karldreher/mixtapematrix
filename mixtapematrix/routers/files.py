@@ -69,8 +69,7 @@ def destination_path(source: File, root_source: File, destination: File) -> str:
 
 
 def paths_overlap(a: str, b: str) -> bool:
-    """True when either directory is the same as, or inside, the other."""
-    a, b = os.path.realpath(a), os.path.realpath(b)
+    """True when either resolved (os.path.realpath) directory is, or is inside, the other."""
     return os.path.commonpath([a, b]) in (a, b)
 
 

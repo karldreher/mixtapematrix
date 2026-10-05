@@ -1,3 +1,4 @@
+import os
 import subprocess
 from collections.abc import Iterator
 from functools import cached_property
@@ -67,13 +68,16 @@ class MixtapeMatrix:
 
     def _check_destinations_safe(self):
         """Sources are read-only: no destination may be, or sit inside, any source."""
+        sources = [m.source.path for m in self.config_data.matrix]
+        real_sources = [os.path.realpath(path) for path in sources]
         for matrix_config in self.config_data.matrix:
             destination = matrix_config.destination.path
-            for other in self.config_data.matrix:
-                if paths_overlap(destination, other.source.path):
+            real_destination = os.path.realpath(destination)
+            for source, real_source in zip(sources, real_sources, strict=True):
+                if paths_overlap(real_destination, real_source):
                     raise click.ClickException(
                         f"Refusing to run: destination {destination} overlaps "
-                        f"source {other.source.path}."
+                        f"source {source}."
                     )
 
     def _entries(self, where: list[tuple[str, str]]) -> Iterator[tuple[str, Tags]]:
