@@ -120,25 +120,33 @@ def _read_header(f) -> CacheHeader:
 
 
 def _encode(entries: dict[str, Entry]) -> bytes:
-    paths = sorted(entries)
+    items = sorted(entries.items())
+    # Every distinct tag value, stored once. Rows hold an index into this sorted
+    # table instead of the text, which compresses far better. Untagged entries
+    # (tags is None) contribute nothing, and absent fields (None) are skipped.
     strings = sorted(
-        {s for p in paths if (tags := entries[p][1]) for s in tags if s is not None}
+        {s for _, (_, tags) in items if tags for s in tags if s is not None}
     )
     ids = {s: i for i, s in enumerate(strings)}
     mtimes: list[int] = []
     columns: dict[str, list[int]] = {field: [] for field in TAG_FIELDS}
     previous = 0
-    for path in paths:
-        mtime, tags = entries[path]
+    for _, (mtime, tags) in items:
         mtimes.append(mtime - previous)
         previous = mtime
-        values = tags or (None,) * len(TAG_FIELDS)
-        for field, value in zip(TAG_FIELDS, values, strict=True):
-            if tags is None:
-                columns[field].append(_NO_TAG)
-            else:
-                columns[field].append(_ABSENT if value is None else ids[value])
-    body = {"strings": strings, "paths": paths, "mtime": mtimes, **columns}
+        row = (
+            [_NO_TAG] * len(TAG_FIELDS)
+            if tags is None
+            else [_ABSENT if value is None else ids[value] for value in tags]
+        )
+        for field, tag_id in zip(TAG_FIELDS, row, strict=True):
+            columns[field].append(tag_id)
+    body = {
+        "strings": strings,
+        "paths": [p for p, _ in items],
+        "mtime": mtimes,
+        **columns,
+    }
     return zstd.compress(ormsgpack.packb(body), level=_ZSTD_LEVEL)
 
 
