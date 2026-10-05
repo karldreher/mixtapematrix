@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 
@@ -146,6 +146,66 @@ class TagRouter(FileRouter):
             self.cache.save(found)
         return found
 
+    def _mp3_paths(self) -> list[str]:
+        """Every non-excluded MP3 under the source directory."""
+        if self.matrix_config.source.is_file:
+            raise ValueError(
+                f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
+            )
+        _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
+        return [
+            p
+            for p in search_files(
+                self.matrix_config.source.path, self.matrix_config.exclude_paths
+            )
+            if p.lower().endswith(".mp3")
+        ]
+
+    def entries(self) -> Iterator[tuple[str, Tags]]:
+        """
+        (absolute path, tags) of every tagged MP3, regardless of the matrix filters.
+        Served from the tag cache when valid; discovery refills it.
+        """
+        root = self.matrix_config.source.path
+        for path, (_, tags) in self._discover_tags(self._mp3_paths()).items():
+            if tags is not None:
+                yield os.path.abspath(os.path.join(root, path)), tags
+
+    def untagged(self) -> list[str]:
+        """
+        Absolute, sorted paths of every MP3 that has no readable ID3 tag.
+
+        The tag cache is used here only to skip files, never to answer: a file whose
+        cache entry still matches its mtime and holds tags is known to be tagged, so
+        it is not opened. The cache also records untagged files as (mtime, None), but
+        a recorded "no tag" is not trusted, so those files are read again, as are
+        files missing from the cache. Nothing is written back to the cache: this
+        pass reads only the files that can be untagged, so it is not a complete
+        discovery and must not be saved as one.
+        """
+        root = self.matrix_config.source.path
+        cached = self.cache.load() if self.cache else {}
+        unknown: list[str] = []
+        for path in self._mp3_paths():
+            try:
+                mtime = os.stat(path).st_mtime_ns
+            except OSError as e:
+                click.echo(f"Error reading {path}: {e}")
+                continue
+            hit = cached.get(os.path.relpath(path, root))
+            if hit and hit[0] == mtime and hit[1] is not None:
+                continue  # Cached as tagged and unchanged: cannot be untagged.
+            unknown.append(path)
+
+        label = f"Checking files in {root}"
+        found: list[str] = []
+        with ThreadPoolExecutor() as pool, self.progress(label, len(unknown)) as bar:
+            for path, tags in zip(unknown, pool.map(read_tags, unknown), strict=True):
+                if tags is None:
+                    found.append(os.path.abspath(path))
+                bar.update(1)
+        return sorted(found, key=str.casefold)
+
     @property
     def source(self) -> Generator[File]:
         """
@@ -153,19 +213,8 @@ class TagRouter(FileRouter):
         This uses the matrix_config to determine the tag and value to search for.
         No arguments are needed, as the matrix_config is already set in the constructor.
         """
-        if self.matrix_config.source.is_file:
-            raise ValueError(
-                f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
-            )
         source_path = self.matrix_config.source.path
-        _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
-        exclude_paths = self.matrix_config.exclude_paths
-
-        mp3_paths = [
-            p
-            for p in search_files(source_path, exclude_paths)
-            if p.lower().endswith(".mp3")
-        ]
+        mp3_paths = self._mp3_paths()
 
         found = self._discover_tags(mp3_paths)
         for file_path in mp3_paths:

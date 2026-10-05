@@ -83,6 +83,72 @@ After running, this will send the files from `source_path` to `destination_path`
 
 Running a second `mixtape` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
 
+## List tags
+
+See which values exist in your library before writing `mp3_files` entries:
+
+```
+mixtape list tag artist
+mixtape list tag genre
+# Also: album, album_artist
+# Narrow with --artist, --album, --genre, --album-artist (exact, case-insensitive; all must match):
+mixtape list tag album --artist Alpha
+mixtape list tag artist --genre funk --album-artist Alpha
+# Prints the distinct values from every matrix source, one per line, sorted and case-insensitive.
+# Use --config to point at a file other than ./matrix.yaml
+# Use --no-cache to ignore the tag cache for one run.
+```
+
+`list tag` ignores `mp3_files` and reads from the same tag cache as `run`: valid entries are reused and anything missing is discovered and cached for the next run.
+
+## Describe the library as a tree
+
+`describe tag` shows the same library as `list tag`, with more detail. The tag you choose is the top level, and below it comes whatever is left of artist > album > song. A song is shown as the full path of its file, such as `/music/rock/one.mp3`.
+
+| `describe tag ...` | Tree |
+| --- | --- |
+| `artist` | artist > album > song |
+| `album` | album > song |
+| `genre` | genre > artist > album > song |
+| `album_artist` | album_artist > artist > album > song |
+
+`genre` and `album_artist` are not part of the artist > album > song chain, so the whole chain sits below them. There is one section per distinct value, sorted. Add a `VALUE` to show only that section.
+
+```
+mixtape describe tag album
+First
+├── /music/rock/four.mp3
+├── /music/rock/one.mp3
+└── /music/rock/two.mp3
+Third
+└── /music/pop/three.mp3
+
+mixtape describe tag genre funk
+Funk
+├── Alpha
+│   └── First
+│       ├── /music/rock/one.mp3
+│       └── /music/rock/two.mp3
+└── Beta
+    └── First
+        └── /music/rock/four.mp3
+```
+
+- Matching is exact and case-insensitive, like `mp3_files`. The `--artist`, `--album`, `--genre` and `--album-artist` filters work as in `list tag` and narrow which files are described.
+- Names that differ only by case share one node and use the spelling that sorts first.
+- A missing artist or album shows as `(unknown artist)` or `(unknown album)`. Files with no ID3 tag are skipped, as are files with no genre or album_artist when that is the top level.
+- Like `list tag`, it ignores `mp3_files` and uses the tag cache. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
+
+### Find untagged files
+
+```
+mixtape describe untagged
+```
+
+Prints the full path of every MP3 with no ID3 tag, one per line, sorted. It takes no tag filters, since an untagged file has no tags to filter on. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
+
+The tag cache is used only to skip files it records as tagged and unchanged. Files missing from the cache, and files it records as untagged, are read again. The cache is never written, so this command cannot leave a partial cache behind.
+
 ## Speed up repeat runs with a tag cache
 
 Reading the ID3 tag of every MP3 is the slow part of a run. Add a `cache` block to cache the discovered tags between runs:
