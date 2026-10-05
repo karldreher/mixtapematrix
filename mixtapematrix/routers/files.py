@@ -2,7 +2,7 @@ import os
 import shutil
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 
 from pydantic import BaseModel, computed_field, field_validator
 
@@ -117,16 +117,23 @@ def glob_prefix(pattern: str) -> str:
     )
 
 
-def search_files(source_path: str, exclude_paths: Iterable[str] = ()) -> Generator[str]:
+ExclusionTest = Callable[[str, bool], bool]
+"""(path, is_dir) -> whether the exclude_paths rules remove that path."""
+
+
+def make_exclusion_test(exclude_paths: Iterable[str] = ()) -> ExclusionTest:
     """
-    Walk the source path and yield all files.
+    A test for whether a single path is removed by `exclude_paths`.
     A plain exclude path removes that directory (or file) and everything beneath it,
     matched on whole paths after resolving to absolute, never by substring.
     A path ending in `**` is a prefix pattern: see glob_prefix.
     """
+    exclude_paths = list(exclude_paths)
     patterns = [p for p in exclude_paths if is_glob(p)]
     prefixes = tuple(glob_prefix(p) for p in patterns)
     excluded = {os.path.abspath(p) for p in exclude_paths if not is_glob(p)}
+    if not excluded and not prefixes:
+        return lambda path, is_dir: False
 
     def is_excluded(path: str, is_dir: bool) -> bool:
         absolute = os.path.abspath(path)
@@ -136,6 +143,16 @@ def search_files(source_path: str, exclude_paths: Iterable[str] = ()) -> Generat
         return absolute.startswith(prefixes) or (
             is_dir and (absolute + os.sep).startswith(prefixes)
         )
+
+    return is_excluded
+
+
+def search_files(source_path: str, exclude_paths: Iterable[str] = ()) -> Generator[str]:
+    """
+    Walk the source path and yield all files, except those `exclude_paths` removes
+    (see make_exclusion_test).
+    """
+    is_excluded = make_exclusion_test(exclude_paths)
 
     for root, dirs, files in os.walk(source_path):
         # Prune in place so os.walk never descends into (or stats) excluded subtrees.

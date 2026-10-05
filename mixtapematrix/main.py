@@ -29,11 +29,13 @@ class MixtapeMatrix:
         use_cache: bool = True,
         prune: bool = False,
         verbose: bool = False,
+        refresh: bool = False,
     ):
         self.config = config
         self.use_cache = use_cache
         self.prune = prune
         self.verbose = verbose
+        self.refresh = refresh
         self.logger = click.echo
         self.debug = self.logger if debug else lambda x: None
         # Log lines would tear an active bar, so verbose and debug runs show none.
@@ -87,7 +89,7 @@ class MixtapeMatrix:
                 cache=self.tag_cache(matrix_config),
                 progress=self.progress,
             )
-            for path, tags in router.entries():
+            for path, tags in router.entries(refresh=self.refresh):
                 if all(_tag_matches(tags, k, v) for k, v in where):
                     yield path, tags
 
@@ -267,6 +269,15 @@ def _library_options(func):
     return func
 
 
+def _refresh_option(func):
+    return click.option(
+        "--refresh",
+        is_flag=True,
+        help="Rescan the library and rewrite the tag cache, instead of reading the "
+        "cache as is",
+    )(func)
+
+
 def _filters(options: dict) -> dict[str, str]:
     """The --<tag> filters that were given, keyed by tag name."""
     return {
@@ -279,8 +290,9 @@ def _filters(options: dict) -> dict[str, str]:
 @list_group.command(name="tag")
 @click.argument("field", type=click.Choice(TAG_FIELDS))
 @_filter_options
+@_refresh_option
 @_library_options
-def list_tag(field, config, debug, verbose, no_cache, **options):
+def list_tag(field, config, debug, verbose, no_cache, refresh, **options):
     """List distinct values of a tag.
 
     FIELD is one of artist, album, genre or album_artist. Prints each distinct
@@ -294,21 +306,28 @@ def list_tag(field, config, debug, verbose, no_cache, **options):
     matches case-insensitively and exactly, like mp3_files, and several filters
     must all match. Any tag may filter any other, e.g. albums by one artist.
 
-    Tags come from the tag cache when it is valid. Files that are missing from
-    the cache or have changed are read and the cache is updated for the next
-    run. Use --no-cache to read every file instead. Progress is shown on stderr,
-    so output can be piped.
+    Tags are read from the tag cache as is, without scanning the library, so
+    files added, deleted or retagged since the cache was written are not seen.
+    Use --refresh to rescan: files that are missing from the cache or have
+    changed are read and the cache is updated. Without a valid cache the library
+    is scanned and the cache is filled. Use --no-cache to read every file and
+    leave the cache alone. Progress is shown on stderr, so output can be piped.
 
     \b
     Examples:
       mixtape list tag artist
+      mixtape list tag artist --refresh
       mixtape list tag album --artist Alpha
       mixtape list tag artist --genre funk --album-artist Alpha
       mixtape list tag genre --config other.yaml
       mixtape list tag album_artist --no-cache
     """
     values = MixtapeMatrix(
-        config=config, debug=debug, verbose=verbose, use_cache=not no_cache
+        config=config,
+        debug=debug,
+        verbose=verbose,
+        use_cache=not no_cache,
+        refresh=refresh,
     ).list_tag(field, where=_filters(options))
     for value in values:
         click.echo(value)
@@ -323,8 +342,9 @@ def describe_group():
 @click.argument("field", type=click.Choice(TAG_FIELDS))
 @click.argument("value", required=False)
 @_filter_options
+@_refresh_option
 @_library_options
-def describe_tag(field, value, config, debug, verbose, no_cache, **options):
+def describe_tag(field, value, config, debug, verbose, no_cache, refresh, **options):
     """Show a tag's values as a tree.
 
     The tag you choose is the top level. Below it comes whatever is left of
@@ -345,8 +365,9 @@ def describe_tag(field, value, config, debug, verbose, no_cache, **options):
     are the top level. A missing artist or album appears as (unknown artist) or
     (unknown album). The matrix mp3_files filters are ignored.
 
-    Tags come from the tag cache as in list tag, and progress is shown on
-    stderr, so output can be piped.
+    Tags are read from the tag cache as is, as in list tag, so the output can
+    be stale until you pass --refresh to rescan. Progress is shown on stderr, so
+    output can be piped.
 
     \b
     Examples:
@@ -359,7 +380,11 @@ def describe_tag(field, value, config, debug, verbose, no_cache, **options):
       mixtape describe tag genre --artist Alpha
     """
     lines = MixtapeMatrix(
-        config=config, debug=debug, verbose=verbose, use_cache=not no_cache
+        config=config,
+        debug=debug,
+        verbose=verbose,
+        use_cache=not no_cache,
+        refresh=refresh,
     ).describe_tag(field, value, where=_filters(options))
     for line in lines:
         click.echo(line)

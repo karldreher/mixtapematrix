@@ -10,7 +10,7 @@ from eyed3.id3 import Genre, Tag
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig, Mp3Match
 from ..progress import ProgressFactory, no_progress
-from .files import File, FileRouter, search_files
+from .files import File, FileRouter, make_exclusion_test, search_files
 
 _EYED3_LOGGER = logging.getLogger("eyed3")
 _eyed3_handlers: list[logging.Handler] = []
@@ -146,13 +146,16 @@ class TagRouter(FileRouter):
             self.cache.save(found)
         return found
 
-    def _mp3_paths(self) -> list[str]:
-        """Every non-excluded MP3 under the source directory."""
+    def _check_source(self) -> None:
         if self.matrix_config.source.is_file:
             raise ValueError(
                 f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
             )
         _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
+
+    def _mp3_paths(self) -> list[str]:
+        """Every non-excluded MP3 under the source directory."""
+        self._check_source()
         return [
             p
             for p in search_files(
@@ -161,11 +164,54 @@ class TagRouter(FileRouter):
             if p.lower().endswith(".mp3")
         ]
 
-    def entries(self) -> Iterator[tuple[str, Tags]]:
+    def cached_entries(self) -> Iterator[tuple[str, Tags]] | None:
+        """
+        (absolute path, tags) of every tagged MP3 the tag cache lists, or None when
+        there is no usable cache (missing, expired, outdated, corrupt or empty).
+
+        This trusts the cache: the source is not walked and no file is stat'ed, so
+        files added, deleted or retagged since the cache was written are not seen.
+        The current exclude_paths are still applied, because the cache may have been
+        built under different ones. Nothing is written back to the cache.
+        """
+        self._check_source()
+        cached = self.cache.load() if self.cache else {}
+        if not cached:
+            return None
+        return self._from_cache(cached)
+
+    def _from_cache(self, cached: dict[str, Entry]) -> Iterator[tuple[str, Tags]]:
+        root = self.matrix_config.source.path
+        is_excluded = make_exclusion_test(self.matrix_config.exclude_paths)
+        dirs: dict[str, bool] = {"": False}  # relative dir -> excluded, by memo
+
+        def dir_excluded(rel_dir: str) -> bool:
+            # Like the walk: a directory is removed if it, or any directory above it
+            # beneath the source, is. The source directory itself is never tested.
+            if rel_dir not in dirs:
+                dirs[rel_dir] = dir_excluded(os.path.dirname(rel_dir)) or is_excluded(
+                    os.path.join(root, rel_dir), True
+                )
+            return dirs[rel_dir]
+
+        for rel, (_, tags) in cached.items():
+            if tags is None:
+                continue
+            path = os.path.join(root, rel)
+            if dir_excluded(os.path.dirname(rel)) or is_excluded(path, False):
+                continue
+            yield os.path.abspath(path), tags
+
+    def entries(self, refresh: bool = False) -> Iterator[tuple[str, Tags]]:
         """
         (absolute path, tags) of every tagged MP3, regardless of the matrix filters.
-        Served from the tag cache when valid; discovery refills it.
+        A valid tag cache is read as is, without touching the source. With `refresh`
+        (or without a usable cache) the source is walked, every file is checked
+        against the cache, and discovery refills it.
         """
+        if not refresh and (cached := self.cached_entries()) is not None:
+            yield from cached
+            return
         root = self.matrix_config.source.path
         for path, (_, tags) in self._discover_tags(self._mp3_paths()).items():
             if tags is not None:
