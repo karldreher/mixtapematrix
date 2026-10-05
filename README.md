@@ -101,6 +101,44 @@ mixtape list tag artist --genre funk --album-artist Alpha
 
 `list tag` ignores `mp3_files` and reads from the same tag cache as `run`: valid entries are reused and anything missing is discovered and cached for the next run.
 
+## Describe the library as a tree
+
+`describe tag` shows the same library as `list tag`, with more detail: an artist > album > song tree. The shape never changes. Songs are file names without `.mp3`. `FIELD` decides what the tree is narrowed or split by:
+
+| `FIELD` | Is a level of the tree? | `describe tag FIELD` | `describe tag FIELD VALUE` |
+| --- | --- | --- | --- |
+| `artist`, `album` | yes | the whole tree | only the branches where `FIELD` matches `VALUE` |
+| `genre`, `album_artist` | no | one section per `FIELD` value, headed by that value, each holding its own tree | only that section |
+
+```
+mixtape describe tag artist Alpha
+Alpha
+├── First
+│   ├── one
+│   └── two
+└── Third
+    └── three
+
+mixtape describe tag genre
+Funk
+├── Alpha
+│   └── First
+│       ├── one
+│       └── two
+└── Beta
+    └── First
+        └── four
+Metal
+└── Alpha
+    └── Third
+        └── three
+```
+
+- Matching is exact and case-insensitive, like `mp3_files`. The `--artist`, `--album`, `--genre` and `--album-artist` filters work as in `list tag` and narrow which files are described.
+- Names that differ only by case share one node and use the spelling that sorts first.
+- A missing artist or album shows as `(unknown artist)` or `(unknown album)`. Files with no ID3 tag are skipped.
+- Like `list tag`, it ignores `mp3_files` and uses the tag cache. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
+
 ## Speed up repeat runs with a tag cache
 
 Reading the ID3 tag of every MP3 is the slow part of a run. Add a `cache` block to cache the discovered tags between runs:

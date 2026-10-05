@@ -7,6 +7,7 @@ import yaml
 
 from .cache import TAG_FIELDS, TagCache, Tags, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
+from .describe import TREE_FIELDS, Node, build_tree, render_children, render_roots
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
 from .routers.files import destination_path, paths_overlap, prune_destination
@@ -102,6 +103,43 @@ class MixtapeMatrix:
                 spellings.setdefault(value.casefold(), set()).add(value)
         # min() picks the same spelling whatever order the filesystem lists files in.
         return [min(spellings[key]) for key in sorted(spellings)]
+
+    def describe_tag(
+        self,
+        field: str,
+        value: str | None = None,
+        where: dict[str, str] | None = None,
+    ) -> list[str]:
+        """
+        An artist > album > song tree, always in that shape. FIELD either narrows it
+        or groups it:
+          - artist or album are levels of the tree, so FIELD=VALUE keeps only the
+            matching branches (no VALUE keeps everything).
+          - any other tag (genre, album_artist) is not a level, so the tree is split
+            into one section per value of FIELD, headed by that value; VALUE keeps
+            one section.
+        """
+        pairs = list((where or {}).items())
+        if value is not None:
+            pairs.append((field, value))
+        rows = list(self._entries(pairs))
+        if field in TREE_FIELDS:
+            return list(render_roots(build_tree(rows)))
+
+        index = TAG_FIELDS.index(field)
+        sections: dict[str, tuple[set[str], list[tuple[str, Tags]]]] = {}
+        for path, tags in rows:
+            if heading := tags[index]:
+                names, members = sections.setdefault(heading.casefold(), (set(), []))
+                names.add(heading)
+                members.append((path, tags))
+        lines: list[str] = []
+        for key in sorted(sections):
+            names, members = sections[key]
+            lines.append(min(names))
+            section: Node = build_tree(members)
+            lines.extend(render_children(section))
+        return lines
 
     def run(self):
         configure_tag_logging(self.verbose)
@@ -283,6 +321,56 @@ def list_tag(field, config, debug, verbose, no_cache, **options):
     ).list_tag(field, where=_filters(options))
     for value in values:
         click.echo(value)
+
+
+@cli.group(name="describe")
+def describe_group():
+    """Show library contents as an artist > album > song tree."""
+
+
+@describe_group.command(name="tag")
+@click.argument("field", type=click.Choice(TAG_FIELDS))
+@click.argument("value", required=False)
+@_filter_options
+@_library_options
+def describe_tag(field, value, config, debug, verbose, no_cache, **options):
+    """Show an artist > album > song tree, narrowed or grouped by a tag.
+
+    The tree always has the same shape: artists, then their albums, then the
+    songs (file names without .mp3). FIELD decides what that tree is limited
+    to, or split by:
+
+    \b
+      artist, album  Levels of the tree. FIELD VALUE keeps only the matching
+                     branches; without VALUE the whole tree is shown.
+      genre,         Not levels of the tree. The tree is split into one
+      album_artist   section per value of FIELD, headed by that value; VALUE
+                     shows one section.
+
+    Matching is exact and case-insensitive, like mp3_files. The --artist,
+    --album, --genre and --album-artist filters work as in list tag and narrow
+    which files are described. Names that differ only by case share one node,
+    shown with the spelling that sorts first. Files with no ID3 tag are skipped,
+    and a missing artist or album appears as (unknown artist) or (unknown
+    album). The matrix mp3_files filters are ignored.
+
+    Tags come from the tag cache as in list tag, and progress is shown on
+    stderr, so output can be piped.
+
+    \b
+    Examples:
+      mixtape describe tag artist              every artist/album/song
+      mixtape describe tag artist Alpha        only Alpha's albums and songs
+      mixtape describe tag album "First"       albums named First, with artists
+      mixtape describe tag genre               one section per genre
+      mixtape describe tag genre funk          only the funk section
+      mixtape describe tag genre --artist Alpha
+    """
+    lines = MixtapeMatrix(
+        config=config, debug=debug, verbose=verbose, use_cache=not no_cache
+    ).describe_tag(field, value, where=_filters(options))
+    for line in lines:
+        click.echo(line)
 
 
 @cli.group(name="cache")
