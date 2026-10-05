@@ -163,13 +163,13 @@ class TagRouter(FileRouter):
 
     def entries(self) -> Iterator[tuple[str, Tags]]:
         """
-        (path relative to the source, tags) of every tagged MP3, regardless of the
-        matrix filters. Served from the tag cache when valid; discovery refills it.
+        (absolute path, tags) of every tagged MP3, regardless of the matrix filters.
+        Served from the tag cache when valid; discovery refills it.
         """
-        found = self._discover_tags(self._mp3_paths())
-        for path, (_, tags) in found.items():
+        root = self.matrix_config.source.path
+        for path, (_, tags) in self._discover_tags(self._mp3_paths()).items():
             if tags is not None:
-                yield path, tags
+                yield os.path.abspath(os.path.join(root, path)), tags
 
     @property
     def source(self) -> Generator[File]:

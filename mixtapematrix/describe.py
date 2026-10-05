@@ -9,11 +9,11 @@ level, and the tree below it is whatever remains of artist > album > song:
     genre   -> genre > artist > album > song     (genre is not in the chain, so
     album_artist -> album_artist > artist > ...   the whole chain sits below it)
 
-Names that differ only by case share one node, shown with the spelling that sorts
-first, so the output does not depend on the order the filesystem lists files in.
+Songs are shown as the full path of the file. Names that differ only by case share
+one node, shown with the spelling that sorts first, so the output does not depend on
+the order the filesystem lists files in.
 """
 
-import os
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
@@ -45,10 +45,6 @@ class Node:
         return node
 
 
-def song_name(path: str) -> str:
-    return os.path.splitext(os.path.basename(path))[0]
-
-
 def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[str, ...]) -> Node:
     """A tree of `levels` (outermost first) with songs at the bottom."""
     root = Node()
@@ -56,7 +52,7 @@ def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[str, ...]) -> Nod
         node = root
         for level in levels:
             node = node.child(tags[TAG_FIELDS.index(level)] or UNKNOWN[level])
-        node.songs.append(song_name(path))
+        node.songs.append(path)
     return root
 
 

@@ -103,7 +103,7 @@ mixtape list tag artist --genre funk --album-artist Alpha
 
 ## Describe the library as a tree
 
-`describe tag` shows the same library as `list tag`, with more detail. The tag you choose is the top level, and below it comes whatever is left of artist > album > song. Songs are file names without `.mp3`.
+`describe tag` shows the same library as `list tag`, with more detail. The tag you choose is the top level, and below it comes whatever is left of artist > album > song. A song is shown as the full path of its file, such as `/music/rock/one.mp3`.
 
 | `describe tag ...` | Tree |
 | --- | --- |
@@ -117,21 +117,21 @@ mixtape list tag artist --genre funk --album-artist Alpha
 ```
 mixtape describe tag album
 First
-├── four
-├── one
-└── two
+├── /music/rock/four.mp3
+├── /music/rock/one.mp3
+└── /music/rock/two.mp3
 Third
-└── three
+└── /music/pop/three.mp3
 
 mixtape describe tag genre funk
 Funk
 ├── Alpha
 │   └── First
-│       ├── one
-│       └── two
+│       ├── /music/rock/one.mp3
+│       └── /music/rock/two.mp3
 └── Beta
     └── First
-        └── four
+        └── /music/rock/four.mp3
 ```
 
 - Matching is exact and case-insensitive, like `mp3_files`. The `--artist`, `--album`, `--genre` and `--album-artist` filters work as in `list tag` and narrow which files are described.

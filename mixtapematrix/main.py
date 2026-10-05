@@ -315,7 +315,7 @@ def describe_tag(field, value, config, debug, verbose, no_cache, **options):
     """Show a tag's values as a tree: the tag, then the rest of artist > album > song.
 
     The tag you choose is the top level. Below it comes whatever is left of
-    artist > album > song (songs are file names without .mp3):
+    artist > album > song (a song is shown as the full path of its file):
 
     \b
       artist         artist > album > song
