@@ -79,7 +79,7 @@ class MixtapeMatrix:
         """
         configure_tag_logging(self.verbose)
         index = TAG_FIELDS.index(field)
-        values: dict[str, str] = {}  # casefolded -> first-seen spelling
+        spellings: dict[str, set[str]] = {}  # casefolded -> every spelling seen
         for matrix_config in self.config_data.matrix:
             router = TagRouter(
                 matrix_config,
@@ -90,8 +90,9 @@ class MixtapeMatrix:
                 if not all(_tag_matches(tags, k, v) for k, v in (where or {}).items()):
                     continue
                 if value := tags[index]:
-                    values.setdefault(value.casefold(), value)
-        return [values[key] for key in sorted(values)]
+                    spellings.setdefault(value.casefold(), set()).add(value)
+        # min() picks the same spelling whatever order the filesystem lists files in.
+        return [min(spellings[key]) for key in sorted(spellings)]
 
     def run(self):
         configure_tag_logging(self.verbose)
@@ -223,7 +224,7 @@ def list_tag(field, config, debug, verbose, no_cache, **filters):
     FIELD is one of artist, album, genre or album_artist. Prints each distinct
     value found in every matrix source in the config, one per line, sorted
     case-insensitively. Values that differ only by case are listed once, using
-    the first spelling found. Files with no ID3 tag, or with no value for FIELD,
+    the spelling that sorts first (uppercase before lowercase). Files with no ID3 tag, or with no value for FIELD,
     are skipped. The matrix mp3_files filters are ignored, so the whole library
     is listed.
 

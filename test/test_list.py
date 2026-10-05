@@ -71,7 +71,7 @@ def list_tag(config, field, *args):
 
 def test_lists_sorted_distinct_values_case_insensitively(tmp_path, library):
     config = write_config(tmp_path, [library])
-    assert list_tag(config, "artist") == ["Alpha", "beta", "Gamma"]
+    assert list_tag(config, "artist") == ["ALPHA", "beta", "Gamma"]
     assert list_tag(config, "genre") == ["Funk", "Metal"]
 
 
@@ -84,7 +84,7 @@ def test_merges_every_matrix_source(tmp_path, library):
     other = tmp_path / "other"
     make_mp3(other / "x.mp3", artist="Delta")
     config = write_config(tmp_path, [library, other])
-    assert list_tag(config, "artist") == ["Alpha", "beta", "Delta", "Gamma"]
+    assert list_tag(config, "artist") == ["ALPHA", "beta", "Delta", "Gamma"]
 
 
 def test_invalid_field_is_a_usage_error(tmp_path, library):
