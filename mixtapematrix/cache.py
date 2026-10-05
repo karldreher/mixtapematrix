@@ -148,18 +148,15 @@ def _decode(data: bytes) -> dict[str, Entry]:
     columns = [body[field] for field in TAG_FIELDS]
     if any(len(column) != len(paths) for column in [mtimes, *columns]):
         raise ValueError("cache columns have mismatched lengths")
+    lookup = [*strings, None, None]  # _NO_TAG (-2) and _ABSENT (-1) index the Nones
+    resolved = zip(*([lookup[t] for t in column] for column in columns), strict=True)
     entries: dict[str, Entry] = {}
     mtime = 0
-    for i, path in enumerate(paths):
-        mtime += mtimes[i]
-        tag_ids = [column[i] for column in columns]
-        if tag_ids[0] == _NO_TAG:
-            entries[path] = (mtime, None)
-        else:
-            entries[path] = (
-                mtime,
-                tuple(None if t == _ABSENT else strings[t] for t in tag_ids),
-            )
+    for path, delta, first, tags in zip(
+        paths, mtimes, columns[0], resolved, strict=True
+    ):
+        mtime += delta
+        entries[path] = (mtime, None if first == _NO_TAG else tags)
     return entries
 
 
