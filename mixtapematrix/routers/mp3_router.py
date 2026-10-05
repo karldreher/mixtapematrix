@@ -121,25 +121,26 @@ class TagRouter(FileRouter):
         root = self.matrix_config.source.path
         cached = self.cache.load() if self.cache else {}
         found: dict[str, Entry] = {}
-        misses: list[tuple[str, int]] = []
+        misses: list[tuple[str, str, int]] = []
         for path in mp3_paths:
             try:
                 mtime = os.stat(path).st_mtime_ns
             except OSError as e:
                 click.echo(f"Error reading {path}: {e}")
                 continue
-            hit = cached.get(os.path.relpath(path, root))
+            rel = os.path.relpath(path, root)
+            hit = cached.get(rel)
             if hit and hit[0] == mtime:
-                found[os.path.relpath(path, root)] = hit
+                found[rel] = hit
             else:
-                misses.append((path, mtime))
+                misses.append((path, rel, mtime))
 
         # Tag reads are I/O-bound, so overlap them; map() preserves input order.
         label = f"Discovering files in {root}"
         with ThreadPoolExecutor() as pool, self.progress(label, len(misses)) as bar:
             read = pool.map(lambda miss: read_tags(miss[0]), misses)
-            for (path, mtime), tags in zip(misses, read, strict=True):
-                found[os.path.relpath(path, root)] = (mtime, tags)
+            for (_, rel, mtime), tags in zip(misses, read, strict=True):
+                found[rel] = (mtime, tags)
                 bar.update(1)
 
         if self.cache and (misses or found.keys() != cached.keys()):
@@ -260,14 +261,11 @@ class TagRouter(FileRouter):
         No arguments are needed, as the matrix_config is already set in the constructor.
         """
         source_path = self.matrix_config.source.path
-        mp3_paths = self._mp3_paths()
-
-        found = self._discover_tags(mp3_paths)
-        for file_path in mp3_paths:
-            _, tags = found.get(os.path.relpath(file_path, source_path), (0, None))
+        found = self._discover_tags(self._mp3_paths())
+        for rel, (_, tags) in found.items():
             if tags is None:
                 continue  # No ID3 tag: this tool only works with tagged files.
             if any(
                 _entry_matches(tags, entry) for entry in self.matrix_config.mp3_files
             ):
-                yield File(path=file_path)
+                yield File(path=os.path.join(source_path, rel))
