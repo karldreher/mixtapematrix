@@ -7,7 +7,7 @@ import yaml
 
 from .cache import TAG_FIELDS, TagCache, Tags, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
-from .describe import TREE_FIELDS, Node, build_tree, render_children, render_roots
+from .describe import describe
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
 from .routers.files import destination_path, paths_overlap, prune_destination
@@ -111,35 +111,13 @@ class MixtapeMatrix:
         where: dict[str, str] | None = None,
     ) -> list[str]:
         """
-        An artist > album > song tree, always in that shape. FIELD either narrows it
-        or groups it:
-          - artist or album are levels of the tree, so FIELD=VALUE keeps only the
-            matching branches (no VALUE keeps everything).
-          - any other tag (genre, album_artist) is not a level, so the tree is split
-            into one section per value of FIELD, headed by that value; VALUE keeps
-            one section.
+        Sections headed by each value of FIELD (or just VALUE), with the rest of
+        artist > album > song beneath. See describe.py for the shape per tag.
         """
         pairs = list((where or {}).items())
         if value is not None:
             pairs.append((field, value))
-        rows = list(self._entries(pairs))
-        if field in TREE_FIELDS:
-            return list(render_roots(build_tree(rows)))
-
-        index = TAG_FIELDS.index(field)
-        sections: dict[str, tuple[set[str], list[tuple[str, Tags]]]] = {}
-        for path, tags in rows:
-            if heading := tags[index]:
-                names, members = sections.setdefault(heading.casefold(), (set(), []))
-                names.add(heading)
-                members.append((path, tags))
-        lines: list[str] = []
-        for key in sorted(sections):
-            names, members = sections[key]
-            lines.append(min(names))
-            section: Node = build_tree(members)
-            lines.extend(render_children(section))
-        return lines
+        return list(describe(self._entries(pairs), field))
 
     def run(self):
         configure_tag_logging(self.verbose)
@@ -334,35 +312,36 @@ def describe_group():
 @_filter_options
 @_library_options
 def describe_tag(field, value, config, debug, verbose, no_cache, **options):
-    """Show an artist > album > song tree, narrowed or grouped by a tag.
+    """Show a tag's values as a tree: the tag, then the rest of artist > album > song.
 
-    The tree always has the same shape: artists, then their albums, then the
-    songs (file names without .mp3). FIELD decides what that tree is limited
-    to, or split by:
+    The tag you choose is the top level. Below it comes whatever is left of
+    artist > album > song (songs are file names without .mp3):
 
     \b
-      artist, album  Levels of the tree. FIELD VALUE keeps only the matching
-                     branches; without VALUE the whole tree is shown.
-      genre,         Not levels of the tree. The tree is split into one
-      album_artist   section per value of FIELD, headed by that value; VALUE
-                     shows one section.
+      artist         artist > album > song
+      album          album > song
+      genre          genre > artist > album > song
+      album_artist   album_artist > artist > album > song
 
-    Matching is exact and case-insensitive, like mp3_files. The --artist,
-    --album, --genre and --album-artist filters work as in list tag and narrow
-    which files are described. Names that differ only by case share one node,
-    shown with the spelling that sorts first. Files with no ID3 tag are skipped,
-    and a missing artist or album appears as (unknown artist) or (unknown
-    album). The matrix mp3_files filters are ignored.
+    There is one section per distinct value of FIELD, sorted case-insensitively.
+    VALUE shows only that section. Matching is exact and case-insensitive, like
+    mp3_files. The --artist, --album, --genre and --album-artist filters work as
+    in list tag and narrow which files are described. Names that differ only by
+    case share one node, shown with the spelling that sorts first. Files with no
+    ID3 tag are skipped, as are files with no genre or album_artist when those
+    are the top level. A missing artist or album appears as (unknown artist) or
+    (unknown album). The matrix mp3_files filters are ignored.
 
     Tags come from the tag cache as in list tag, and progress is shown on
     stderr, so output can be piped.
 
     \b
     Examples:
-      mixtape describe tag artist              every artist/album/song
-      mixtape describe tag artist Alpha        only Alpha's albums and songs
-      mixtape describe tag album "First"       albums named First, with artists
-      mixtape describe tag genre               one section per genre
+      mixtape describe tag artist              every artist > album > song
+      mixtape describe tag artist Alpha        only Alpha
+      mixtape describe tag album               every album > song
+      mixtape describe tag album "First"       only the album named First
+      mixtape describe tag genre               every genre > artist > album > song
       mixtape describe tag genre funk          only the funk section
       mixtape describe tag genre --artist Alpha
     """

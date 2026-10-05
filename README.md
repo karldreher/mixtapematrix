@@ -103,23 +103,27 @@ mixtape list tag artist --genre funk --album-artist Alpha
 
 ## Describe the library as a tree
 
-`describe tag` shows the same library as `list tag`, with more detail: an artist > album > song tree. The shape never changes. Songs are file names without `.mp3`. `FIELD` decides what the tree is narrowed or split by:
+`describe tag` shows the same library as `list tag`, with more detail. The tag you choose is the top level, and below it comes whatever is left of artist > album > song. Songs are file names without `.mp3`.
 
-| `FIELD` | Is a level of the tree? | `describe tag FIELD` | `describe tag FIELD VALUE` |
-| --- | --- | --- | --- |
-| `artist`, `album` | yes | the whole tree | only the branches where `FIELD` matches `VALUE` |
-| `genre`, `album_artist` | no | one section per `FIELD` value, headed by that value, each holding its own tree | only that section |
+| `describe tag ...` | Tree |
+| --- | --- |
+| `artist` | artist > album > song |
+| `album` | album > song |
+| `genre` | genre > artist > album > song |
+| `album_artist` | album_artist > artist > album > song |
+
+`genre` and `album_artist` are not part of the artist > album > song chain, so the whole chain sits below them. There is one section per distinct value, sorted. Add a `VALUE` to show only that section.
 
 ```
-mixtape describe tag artist Alpha
-Alpha
-├── First
-│   ├── one
-│   └── two
-└── Third
-    └── three
+mixtape describe tag album
+First
+├── four
+├── one
+└── two
+Third
+└── three
 
-mixtape describe tag genre
+mixtape describe tag genre funk
 Funk
 ├── Alpha
 │   └── First
@@ -128,15 +132,11 @@ Funk
 └── Beta
     └── First
         └── four
-Metal
-└── Alpha
-    └── Third
-        └── three
 ```
 
 - Matching is exact and case-insensitive, like `mp3_files`. The `--artist`, `--album`, `--genre` and `--album-artist` filters work as in `list tag` and narrow which files are described.
 - Names that differ only by case share one node and use the spelling that sorts first.
-- A missing artist or album shows as `(unknown artist)` or `(unknown album)`. Files with no ID3 tag are skipped.
+- A missing artist or album shows as `(unknown artist)` or `(unknown album)`. Files with no ID3 tag are skipped, as are files with no genre or album_artist when that is the top level.
 - Like `list tag`, it ignores `mp3_files` and uses the tag cache. `--config`, `--no-cache`, `--verbose` and `--debug` are available.
 
 ## Speed up repeat runs with a tag cache

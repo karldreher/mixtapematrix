@@ -1,9 +1,16 @@
 """
-The artist > album > song tree behind `mixtape describe`.
+The trees behind `mixtape describe`.
 
-The tree shape is fixed: artists contain albums, albums contain songs. Names that
-differ only by case share one node, shown with the spelling that sorts first, so
-the output does not depend on the order the filesystem lists files in.
+Songs sit under albums, and albums under artists. The tag you describe is the top
+level, and the tree below it is whatever remains of artist > album > song:
+
+    artist  -> artist > album > song
+    album   -> album > song
+    genre   -> genre > artist > album > song     (genre is not in the chain, so
+    album_artist -> album_artist > artist > ...   the whole chain sits below it)
+
+Names that differ only by case share one node, shown with the spelling that sorts
+first, so the output does not depend on the order the filesystem lists files in.
 """
 
 import os
@@ -12,10 +19,14 @@ from dataclasses import dataclass, field
 
 from .cache import TAG_FIELDS, Tags
 
-# Tags that are levels of the tree. Any other tag (genre, album_artist) is not,
-# so it can only group the tree into sections.
-TREE_FIELDS = ("artist", "album")
+# The levels songs can be nested under, outermost first.
+LEVELS = ("artist", "album")
 UNKNOWN = {"artist": "(unknown artist)", "album": "(unknown album)"}
+
+
+def levels_below(field: str) -> tuple[str, ...]:
+    """The levels between FIELD and the songs: the rest of the chain after FIELD."""
+    return LEVELS[LEVELS.index(field) + 1 :] if field in LEVELS else LEVELS
 
 
 @dataclass
@@ -38,13 +49,14 @@ def song_name(path: str) -> str:
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def build_tree(rows: Iterable[tuple[str, Tags]]) -> Node:
-    """An artist > album > song tree from (path, tags) rows."""
+def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[str, ...]) -> Node:
+    """A tree of `levels` (outermost first) with songs at the bottom."""
     root = Node()
     for path, tags in rows:
-        artist = tags[TAG_FIELDS.index("artist")] or UNKNOWN["artist"]
-        album = tags[TAG_FIELDS.index("album")] or UNKNOWN["album"]
-        root.child(artist).child(album).songs.append(song_name(path))
+        node = root
+        for level in levels:
+            node = node.child(tags[TAG_FIELDS.index(level)] or UNKNOWN[level])
+        node.songs.append(song_name(path))
     return root
 
 
@@ -67,9 +79,22 @@ def render_children(node: Node, prefix: str = "") -> Iterator[str]:
             yield from render_children(item, prefix + ("    " if last else "│   "))
 
 
-def render_roots(root: Node) -> Iterator[str]:
-    """A tree whose top level (the artists) is flush left, with no connector."""
-    for item in _children(root):
-        assert isinstance(item, Node)  # artists only; songs sit under albums
-        yield item.label
-        yield from render_children(item)
+def describe(rows: Iterable[tuple[str, Tags]], tag: str) -> Iterator[str]:
+    """
+    One section per distinct value of `tag`, sorted, each headed by that value with
+    the rest of artist > album > song beneath it. Files with no value for `tag` are
+    left out, except artist and album, which are grouped as (unknown ...).
+    """
+    index = TAG_FIELDS.index(tag)
+    sections: dict[str, tuple[set[str], list[tuple[str, Tags]]]] = {}
+    for path, tags in rows:
+        heading = tags[index] or UNKNOWN.get(tag)
+        if heading:
+            names, members = sections.setdefault(heading.casefold(), (set(), []))
+            names.add(heading)
+            members.append((path, tags))
+    levels = levels_below(tag)
+    for key in sorted(sections):
+        names, members = sections[key]
+        yield min(names)
+        yield from render_children(build_tree(members, levels))

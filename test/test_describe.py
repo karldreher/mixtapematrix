@@ -27,7 +27,7 @@ def describe(tmp_path, library, *args):
     return result.stdout.splitlines()
 
 
-def test_artist_shows_the_whole_tree(tmp_path, library):
+def test_artist_is_the_top_level_above_albums_and_songs(tmp_path, library):
     assert describe(tmp_path, library, "artist") == [
         "Alpha",
         "├── First",
@@ -43,7 +43,7 @@ def test_artist_shows_the_whole_tree(tmp_path, library):
     ]
 
 
-def test_artist_value_keeps_matching_branches(tmp_path, library):
+def test_artist_value_shows_one_artist(tmp_path, library):
     assert describe(tmp_path, library, "artist", "alpha") == [
         "Alpha",
         "├── First",
@@ -54,19 +54,24 @@ def test_artist_value_keeps_matching_branches(tmp_path, library):
     ]
 
 
-def test_album_keeps_the_artist_album_song_shape(tmp_path, library):
-    assert describe(tmp_path, library, "album", "first") == [
-        "Alpha",
-        "└── First",
-        "    ├── one",
-        "    └── two",
-        "Beta",
-        "└── First",
-        "    └── four",
+def test_album_is_the_top_level_above_its_songs(tmp_path, library):
+    assert describe(tmp_path, library, "album") == [
+        "(unknown album)",
+        "└── loose",
+        "First",
+        "├── four",
+        "├── one",
+        "└── two",
+        "Third",
+        "└── three",
     ]
 
 
-def test_genre_groups_the_tree_into_sections(tmp_path, library):
+def test_album_value_shows_one_album(tmp_path, library):
+    assert describe(tmp_path, library, "album", "third") == ["Third", "└── three"]
+
+
+def test_genre_is_the_top_level_above_artist_album_song(tmp_path, library):
     assert describe(tmp_path, library, "genre") == [
         "Funk",
         "├── Alpha",
@@ -85,7 +90,7 @@ def test_genre_groups_the_tree_into_sections(tmp_path, library):
     ]
 
 
-def test_genre_value_shows_one_section(tmp_path, library):
+def test_genre_value_shows_one_genre(tmp_path, library):
     assert describe(tmp_path, library, "genre", "METAL") == [
         "Metal",
         "└── Alpha",
@@ -149,3 +154,15 @@ def test_missing_config_fails_cleanly():
     )
     assert result.exit_code == 1
     assert "Config file not found" in result.output
+
+
+def test_album_artist_is_the_top_level_and_skips_files_without_one(tmp_path):
+    root = tmp_path / "library"
+    make_mp3(root / "a.mp3", artist="One", album="Mix", album_artist="Various")
+    make_mp3(root / "b.mp3", artist="Two", album="Solo")  # no album_artist
+    assert describe(tmp_path, root, "album_artist") == [
+        "Various",
+        "└── One",
+        "    └── Mix",
+        "        └── a",
+    ]
