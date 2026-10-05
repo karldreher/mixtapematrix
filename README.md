@@ -81,6 +81,21 @@ mixtape run
 ```
 After running, this will send the files from `source_path` to `destination_path` accordingly.
 
+## List tags
+
+See which values exist in your library before writing `mp3_files` entries:
+
+```
+mixtape list tag artist
+mixtape list tag genre
+# Also: album, album_artist
+# Prints the distinct values from every matrix source, one per line, sorted and case-insensitive.
+# Use --config to point at a file other than ./matrix.yaml
+# Use --no-cache to ignore the tag cache for one run.
+```
+
+`list tag` ignores `mp3_files` and reads from the same tag cache as `run`: valid entries are reused and anything missing is discovered and cached for the next run.
+
 Running a second `mixtape` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
 
 ## Speed up repeat runs with a tag cache

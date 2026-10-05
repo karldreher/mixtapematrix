@@ -1,6 +1,6 @@
 import logging
 import os
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 
@@ -146,6 +146,31 @@ class TagRouter(FileRouter):
             self.cache.save(found)
         return found
 
+    def _mp3_paths(self) -> list[str]:
+        """Every non-excluded MP3 under the source directory."""
+        if self.matrix_config.source.is_file:
+            raise ValueError(
+                f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
+            )
+        _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
+        return [
+            p
+            for p in search_files(
+                self.matrix_config.source.path, self.matrix_config.exclude_paths
+            )
+            if p.lower().endswith(".mp3")
+        ]
+
+    def tags(self) -> Iterator[Tags]:
+        """
+        The tags of every tagged MP3 in the source, regardless of the matrix filters.
+        Served from the tag cache when valid; discovery refills it otherwise.
+        """
+        found = self._discover_tags(self._mp3_paths())
+        for _, tags in found.values():
+            if tags is not None:
+                yield tags
+
     @property
     def source(self) -> Generator[File]:
         """
@@ -153,19 +178,8 @@ class TagRouter(FileRouter):
         This uses the matrix_config to determine the tag and value to search for.
         No arguments are needed, as the matrix_config is already set in the constructor.
         """
-        if self.matrix_config.source.is_file:
-            raise ValueError(
-                f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
-            )
         source_path = self.matrix_config.source.path
-        _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
-        exclude_paths = self.matrix_config.exclude_paths
-
-        mp3_paths = [
-            p
-            for p in search_files(source_path, exclude_paths)
-            if p.lower().endswith(".mp3")
-        ]
+        mp3_paths = self._mp3_paths()
 
         found = self._discover_tags(mp3_paths)
         for file_path in mp3_paths:

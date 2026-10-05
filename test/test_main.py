@@ -62,6 +62,15 @@ def test_run_missing_config_fails():
     assert "mixtape init" in result.output
 
 
+def test_list_tag_missing_config_fails_cleanly():
+    result = CliRunner().invoke(
+        cli, ["list", "tag", "artist", "--config", "does-not-exist.yaml"]
+    )
+    assert result.exit_code == 1
+    assert "Config file not found: does-not-exist.yaml" in result.output
+    assert not isinstance(result.exception, FileNotFoundError)
+
+
 def test_run_with_config(mkdirs):
     result = CliRunner().invoke(cli, ["run", "--config", "test/matrix.yaml"])
     assert result.exit_code == 0, result.output

@@ -4,7 +4,7 @@ from functools import cached_property
 import click
 import yaml
 
-from .cache import TagCache, clean_cache, parse_ttl
+from .cache import TAG_FIELDS, TagCache, clean_cache, parse_ttl
 from .config import ConfigFile, MatrixConfig
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
@@ -71,6 +71,22 @@ class MixtapeMatrix:
                         f"Refusing to run: destination {destination} overlaps "
                         f"source {other.source.path}."
                     )
+
+    def list_tag(self, field: str) -> list[str]:
+        """Distinct values of a tag across every matrix source, sorted."""
+        configure_tag_logging(self.verbose)
+        index = TAG_FIELDS.index(field)
+        values: dict[str, str] = {}  # casefolded -> first-seen spelling
+        for matrix_config in self.config_data.matrix:
+            router = TagRouter(
+                matrix_config,
+                cache=self.tag_cache(matrix_config),
+                progress=self.progress,
+            )
+            for tags in router.tags():
+                if value := tags[index]:
+                    values.setdefault(value.casefold(), value)
+        return [values[key] for key in sorted(values)]
 
     def run(self):
         configure_tag_logging(self.verbose)
@@ -166,6 +182,49 @@ def run(config, debug, verbose, no_cache, prune):
 def init(no_json_schema, force):
     """Create a default matrix.yaml and matrix.schema.json in the current directory."""
     ConfigFile.create_default_config(json_schema=not no_json_schema, force=force)
+
+
+@cli.group(name="list")
+def list_group():
+    """List information about the music library."""
+
+
+@list_group.command(name="tag")
+@click.argument("field", type=click.Choice(TAG_FIELDS))
+@click.option("--config", default="matrix.yaml", help="The YAML configuration file")
+@click.option("--debug", help="Enable debug logging", is_flag=True)
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
+)
+@click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
+def list_tag(field, config, debug, verbose, no_cache):
+    """List distinct values of a tag.
+
+    FIELD is one of artist, album, genre or album_artist. Prints each distinct
+    value found in every matrix source in the config, one per line, sorted
+    case-insensitively. Values that differ only by case are listed once, using
+    the first spelling found. Files with no ID3 tag, or with no value for FIELD,
+    are skipped. The matrix mp3_files filters are ignored, so the whole library
+    is listed.
+
+    Tags come from the tag cache when it is valid. Files that are missing from
+    the cache or have changed are read and the cache is updated for the next
+    run. Use --no-cache to read every file instead. Progress is shown on stderr,
+    so output can be piped.
+
+    \b
+    Examples:
+      mixtape list tag artist
+      mixtape list tag genre --config other.yaml
+      mixtape list tag album_artist --no-cache
+    """
+    values = MixtapeMatrix(
+        config=config, debug=debug, verbose=verbose, use_cache=not no_cache
+    ).list_tag(field)
+    for value in values:
+        click.echo(value)
 
 
 @cli.group(name="cache")
