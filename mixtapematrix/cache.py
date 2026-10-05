@@ -120,25 +120,33 @@ def _read_header(f) -> CacheHeader:
 
 
 def _encode(entries: dict[str, Entry]) -> bytes:
-    paths = sorted(entries)
+    items = sorted(entries.items())
+    # Every distinct tag value, stored once. Rows hold an index into this sorted
+    # table instead of the text, which compresses far better. Untagged entries
+    # (tags is None) contribute nothing, and absent fields (None) are skipped.
     strings = sorted(
-        {s for p in paths if (tags := entries[p][1]) for s in tags if s is not None}
+        {s for _, (_, tags) in items if tags for s in tags if s is not None}
     )
     ids = {s: i for i, s in enumerate(strings)}
     mtimes: list[int] = []
     columns: dict[str, list[int]] = {field: [] for field in TAG_FIELDS}
     previous = 0
-    for path in paths:
-        mtime, tags = entries[path]
+    for _, (mtime, tags) in items:
         mtimes.append(mtime - previous)
         previous = mtime
-        values = tags or (None,) * len(TAG_FIELDS)
-        for field, value in zip(TAG_FIELDS, values, strict=True):
-            if tags is None:
-                columns[field].append(_NO_TAG)
-            else:
-                columns[field].append(_ABSENT if value is None else ids[value])
-    body = {"strings": strings, "paths": paths, "mtime": mtimes, **columns}
+        row = (
+            [_NO_TAG] * len(TAG_FIELDS)
+            if tags is None
+            else [_ABSENT if value is None else ids[value] for value in tags]
+        )
+        for field, tag_id in zip(TAG_FIELDS, row, strict=True):
+            columns[field].append(tag_id)
+    body = {
+        "strings": strings,
+        "paths": [p for p, _ in items],
+        "mtime": mtimes,
+        **columns,
+    }
     return zstd.compress(ormsgpack.packb(body), level=_ZSTD_LEVEL)
 
 
@@ -148,18 +156,15 @@ def _decode(data: bytes) -> dict[str, Entry]:
     columns = [body[field] for field in TAG_FIELDS]
     if any(len(column) != len(paths) for column in [mtimes, *columns]):
         raise ValueError("cache columns have mismatched lengths")
+    lookup = [*strings, None, None]  # _NO_TAG (-2) and _ABSENT (-1) index the Nones
+    resolved = zip(*([lookup[t] for t in column] for column in columns), strict=True)
     entries: dict[str, Entry] = {}
     mtime = 0
-    for i, path in enumerate(paths):
-        mtime += mtimes[i]
-        tag_ids = [column[i] for column in columns]
-        if tag_ids[0] == _NO_TAG:
-            entries[path] = (mtime, None)
-        else:
-            entries[path] = (
-                mtime,
-                tuple(None if t == _ABSENT else strings[t] for t in tag_ids),
-            )
+    for path, delta, first, tags in zip(
+        paths, mtimes, columns[0], resolved, strict=True
+    ):
+        mtime += delta
+        entries[path] = (mtime, None if first == _NO_TAG else tags)
     return entries
 
 

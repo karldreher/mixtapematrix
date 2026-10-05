@@ -46,13 +46,20 @@ class Node:
 
 
 def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[str, ...]) -> Node:
-    """A tree of `levels` (outermost first) with songs at the bottom."""
+    """
+    A tree of `levels` (outermost first) with songs at the bottom. A level with no
+    value and no UNKNOWN placeholder leaves the row out.
+    """
+    steps = [(TAG_FIELDS.index(level), UNKNOWN.get(level)) for level in levels]
     root = Node()
     for path, tags in rows:
         node = root
-        for level in levels:
-            node = node.child(tags[TAG_FIELDS.index(level)] or UNKNOWN[level])
-        node.songs.append(path)
+        for index, unknown in steps:
+            if (name := tags[index] or unknown) is None:
+                break
+            node = node.child(name)
+        else:
+            node.songs.append(path)
     return root
 
 
@@ -81,16 +88,7 @@ def describe(rows: Iterable[tuple[str, Tags]], tag: str) -> Iterator[str]:
     the rest of artist > album > song beneath it. Files with no value for `tag` are
     left out, except artist and album, which are grouped as (unknown ...).
     """
-    index = TAG_FIELDS.index(tag)
-    sections: dict[str, tuple[set[str], list[tuple[str, Tags]]]] = {}
-    for path, tags in rows:
-        heading = tags[index] or UNKNOWN.get(tag)
-        if heading:
-            names, members = sections.setdefault(heading.casefold(), (set(), []))
-            names.add(heading)
-            members.append((path, tags))
-    levels = levels_below(tag)
-    for key in sorted(sections):
-        names, members = sections[key]
-        yield min(names)
-        yield from render_children(build_tree(members, levels))
+    root = build_tree(rows, (tag, *levels_below(tag)))
+    for _, section in sorted(root.children.items()):
+        yield section.label
+        yield from render_children(section)

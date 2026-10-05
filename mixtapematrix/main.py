@@ -1,3 +1,4 @@
+import os
 import subprocess
 from collections.abc import Iterator
 from functools import cached_property
@@ -10,7 +11,7 @@ from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
-from .routers.files import destination_path, paths_overlap, prune_destination
+from .routers.files import paths_overlap, prune_destination
 from .routers.mp3_router import TagRouter, _tag_matches, configure_tag_logging
 
 
@@ -67,13 +68,16 @@ class MixtapeMatrix:
 
     def _check_destinations_safe(self):
         """Sources are read-only: no destination may be, or sit inside, any source."""
+        sources = [m.source.path for m in self.config_data.matrix]
+        real_sources = [os.path.realpath(path) for path in sources]
         for matrix_config in self.config_data.matrix:
             destination = matrix_config.destination.path
-            for other in self.config_data.matrix:
-                if paths_overlap(destination, other.source.path):
+            real_destination = os.path.realpath(destination)
+            for source, real_source in zip(sources, real_sources, strict=True):
+                if paths_overlap(real_destination, real_source):
                     raise click.ClickException(
                         f"Refusing to run: destination {destination} overlaps "
-                        f"source {other.source.path}."
+                        f"source {source}."
                     )
 
     def _entries(self, where: list[tuple[str, str]]) -> Iterator[tuple[str, Tags]]:
@@ -150,22 +154,13 @@ class MixtapeMatrix:
             # Listing first runs tag discovery (and its bar) to completion, and
             # gives the copy bar a total.
             files = list(router.source)
-            label = f"Copying files from {matrix_config.source.path}"
+            # source and destination are computed properties that stat on every access.
+            source, destination = matrix_config.source, matrix_config.destination
+            label = f"Copying files from {source.path}"
             with self.progress(label, len(files)) as bar:
                 for file in files:
-                    self.debug(
-                        f"Copying {file.path} to {matrix_config.destination.path}"
-                    )
-                    # TODO: not terribly optimized and could be invalid based on
-                    # attribute decisions at class level
-                    TagRouter.deeply_copy(
-                        file, matrix_config.source, matrix_config.destination
-                    )
-                    kept.add(
-                        destination_path(
-                            file, matrix_config.source, matrix_config.destination
-                        )
-                    )
+                    self.debug(f"Copying {file.path} to {destination.path}")
+                    kept.add(TagRouter.deeply_copy(file, source, destination))
                     bar.update(1)
         if self.prune:
             for root, kept in keep.items():

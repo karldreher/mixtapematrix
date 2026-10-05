@@ -41,7 +41,8 @@ class FileRouter(ABC):
         raise NotImplementedError
 
     @staticmethod
-    def deeply_copy(source: File, root_source: File, destination: File) -> None:
+    def deeply_copy(source: File, root_source: File, destination: File) -> str:
+        """Copy source into destination, returning the path it was copied to."""
         destination_file = destination_path(source, root_source, destination)
         try:
             if os.path.exists(destination_file):
@@ -59,6 +60,7 @@ class FileRouter(ABC):
         except OSError as e:
             print(f"Error copying {source.path} to {destination_file}: {e}")
             sys.exit(1)
+        return destination_file
 
 
 def destination_path(source: File, root_source: File, destination: File) -> str:
@@ -67,8 +69,7 @@ def destination_path(source: File, root_source: File, destination: File) -> str:
 
 
 def paths_overlap(a: str, b: str) -> bool:
-    """True when either directory is the same as, or inside, the other."""
-    a, b = os.path.realpath(a), os.path.realpath(b)
+    """True when either resolved (os.path.realpath) directory is, or is inside, the other."""
     return os.path.commonpath([a, b]) in (a, b)
 
 
