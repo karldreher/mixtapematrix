@@ -10,7 +10,15 @@ from eyed3.id3 import Genre, Tag
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig, Mp3Match
 from ..progress import ProgressFactory, no_progress
-from .files import File, FileRouter, make_exclusion_test, search_files
+from .files import (
+    File,
+    FileRouter,
+    glob_prefix,
+    is_glob,
+    make_exclusion_test,
+    search_files,
+    subtree_test,
+)
 
 _EYED3_LOGGER = logging.getLogger("eyed3")
 _eyed3_handlers: list[logging.Handler] = []
@@ -91,11 +99,6 @@ def _tag_matches(tags: Tags, key: str, value: str) -> bool:
     return tag_value is not None and tag_value.lower() == value.lower()
 
 
-def _in_folder(path: str, folder: str) -> bool:
-    """Whether an absolute path is beneath a normalized absolute folder, by whole components."""
-    return path.startswith(folder if folder.endswith(os.sep) else folder + os.sep)
-
-
 def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:
     """
     An entry matches when any of its own tags match, or its folder holds the (absolute)
@@ -105,7 +108,7 @@ def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:
     own = [(k, v) for k in TAG_FIELDS if (v := getattr(entry, k)) is not None]
     if not (
         any(_tag_matches(tags, k, v) for k, v in own)
-        or (entry.folder is not None and _in_folder(path, entry.folder))
+        or (entry.folder is not None and subtree_test(entry.folder)(path))
     ):
         return False
     return entry.exclude is None or not _entry_matches(tags, path, entry.exclude)
@@ -165,9 +168,15 @@ class TagRouter(FileRouter):
         root = os.path.abspath(self.matrix_config.source.path)
         for entry in self.matrix_config.mp3_files:
             for folder in entry.folders():
-                if not os.path.isdir(folder):
+                # Like exclude_paths, glob entries need not exist; plain ones must.
+                if not is_glob(folder) and not os.path.isdir(folder):
                     raise ValueError(f"Folder {folder} is not an existing directory")
-                if not _in_folder(folder + os.sep, root):
+                inside = (
+                    glob_prefix(folder).startswith(os.path.join(root, ""))
+                    if is_glob(folder)
+                    else subtree_test(root)(os.path.abspath(folder))
+                )
+                if not inside:
                     raise ValueError(f"Folder {folder} is not inside {root}")
 
     def _mp3_paths(self) -> list[str]:

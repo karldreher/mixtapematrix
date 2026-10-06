@@ -3,8 +3,10 @@ import shutil
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable
+from functools import cache
+from typing import Annotated
 
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import AfterValidator, BaseModel, computed_field, field_validator
 
 
 class File(BaseModel):
@@ -116,6 +118,39 @@ def glob_prefix(pattern: str) -> str:
     return (
         prefix + os.sep if head.endswith(("/", os.sep)) and prefix != os.sep else prefix
     )
+
+
+def _validate_path_pattern(path: str) -> str:
+    body = path[: -len(GLOB_TAIL)] if is_glob(path) else path
+    if any(char in body for char in "*?["):
+        raise ValueError(
+            f"Path '{path}' is not supported: wildcards are only "
+            "allowed as a trailing '**', e.g. /music/rock** or /music/rock/**."
+        )
+    return path
+
+
+PathPattern = Annotated[str, AfterValidator(_validate_path_pattern)]
+"""
+A path or a trailing-`**` prefix pattern (see glob_prefix). Every config field that
+takes locations (exclude_paths, mp3_files folder) uses this type, so the syntax
+they accept is defined, and enforced, in one place.
+"""
+
+
+@cache
+def subtree_test(pattern: str) -> Callable[[str], bool]:
+    """
+    A test for whether an absolute path is the pattern's directory or beneath it.
+    A plain pattern matches whole path components; a trailing-`**` pattern matches
+    by prefix, exactly as in make_exclusion_test.
+    """
+    if is_glob(pattern):
+        prefix = glob_prefix(pattern)
+        return lambda path: path.startswith(prefix)
+    folder = os.path.abspath(pattern)
+    beneath = os.path.join(folder, "")
+    return lambda path: path == folder or path.startswith(beneath)
 
 
 ExclusionTest = Callable[[str, bool], bool]

@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from .cache import TTL_PATTERN, parse_ttl
-from .routers.files import GLOB_TAIL, File, is_glob
+from .routers.files import File, PathPattern, is_glob
 
 CONFIG_FILENAME = "matrix.yaml"
 SCHEMA_FILENAME = "matrix.schema.json"
@@ -40,9 +40,12 @@ class Mp3Match(BaseModel):
     """Match files whose genre tag equals this value (case-insensitive)."""
     album_artist: str | None = None
     """Match files whose album artist tag equals this value (case-insensitive)."""
-    folder: str | None = None
+    folder: PathPattern | None = None
     """Match files beneath this absolute directory, which must be inside source_path.
     Matched on whole path components, so /music/rock does not match /music/rockabilly.
+    May end in ** to match by prefix, like exclude_paths: /music/rock** matches
+    everything whose path starts with /music/rock, and /music/rock/** everything
+    beneath /music/rock. No other wildcards are supported.
     Only tagged MP3s are copied, as with tags."""
     exclude: "Mp3Match | None" = None
     """Files this entry would match are skipped when any key listed here matches
@@ -57,7 +60,7 @@ class Mp3Match(BaseModel):
             raise ValueError(
                 f"Folder '{folder}' must be an absolute path inside source_path."
             )
-        return os.path.normpath(folder)
+        return folder if is_glob(folder) else os.path.normpath(folder)
 
     @model_validator(mode="after")
     def validate_exclude_has_key(self) -> "Mp3Match":
@@ -89,24 +92,12 @@ class MatrixConfig(BaseModel):
 
     source_path: str
     """Source path is the directory to copy files from."""
-    exclude_paths: list[str] = []
+    exclude_paths: list[PathPattern] = []
     """Directories or files to leave out, with everything beneath them.
     A plain entry is a literal path matched on whole path components. An entry may end
     in ** to match by prefix: /music/rock** skips everything whose path starts with
     /music/rock, and /music/rock/** skips everything beneath /music/rock.
     No other wildcards are supported."""
-
-    @field_validator("exclude_paths")
-    @classmethod
-    def validate_exclude_paths(cls, paths: list[str]) -> list[str]:
-        for path in paths:
-            body = path[: -len(GLOB_TAIL)] if is_glob(path) else path
-            if any(char in body for char in "*?["):
-                raise ValueError(
-                    f"Exclude path '{path}' is not supported: wildcards are only "
-                    "allowed as a trailing '**', e.g. /music/rock** or /music/rock/**."
-                )
-        return paths
 
     destination_path: str
     """Destination path is the directory to copy files to."""
