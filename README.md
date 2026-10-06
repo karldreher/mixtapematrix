@@ -57,7 +57,7 @@ Based on the config file, Mixtape Matrix will find any files in `source_path`, w
 
 ## Selecting a folder
 
-`folder` is a match key like `artist` or `album`, but it matches on **location**: every tagged MP3 beneath that directory, subdirectories included, whatever its tags say. It must be an absolute path to an existing directory inside `source_path`, or the run stops with an error before copying anything. It is matched on whole path components, so `/music/rock` never matches `/music/rockabilly`.
+`folder` is a match key like `artist` or `album`, but it matches on **location**: every tagged MP3 beneath that directory, subdirectories included, whatever its tags say. It must be an absolute path to an existing directory inside `source_path`, or the run stops with an error before copying anything. It is matched on whole path components, so `/music/rock` never matches `/music/rockabilly`. Like `exclude_paths`, it may end in `**` to match by prefix: `/music/rock**` matches everything whose path starts with `/music/rock` (including `rockabilly`), and `/music/rock/**` everything beneath it. Glob entries need not exist but must still be inside `source_path`. Both fields share one validator, so no other wildcard is supported in either.
 
 ```yaml
 mp3_files:
