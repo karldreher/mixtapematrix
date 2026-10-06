@@ -91,15 +91,24 @@ def _tag_matches(tags: Tags, key: str, value: str) -> bool:
     return tag_value is not None and tag_value.lower() == value.lower()
 
 
-def _entry_matches(tags: Tags, entry: Mp3Match) -> bool:
+def _in_folder(path: str, folder: str) -> bool:
+    """Whether an absolute path is beneath a normalized absolute folder, by whole components."""
+    return path.startswith(folder if folder.endswith(os.sep) else folder + os.sep)
+
+
+def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:
     """
-    An entry matches when any of its own tags match and its exclude block does not.
-    An exclude block is evaluated the same way, so nested excludes work to any depth.
+    An entry matches when any of its own tags match, or its folder holds the (absolute)
+    path, and its exclude block does not. An exclude block is evaluated the same way,
+    so nested excludes work to any depth.
     """
     own = [(k, v) for k in TAG_FIELDS if (v := getattr(entry, k)) is not None]
-    if not any(_tag_matches(tags, k, v) for k, v in own):
+    if not (
+        any(_tag_matches(tags, k, v) for k, v in own)
+        or (entry.folder is not None and _in_folder(path, entry.folder))
+    ):
         return False
-    return entry.exclude is None or not _entry_matches(tags, entry.exclude)
+    return entry.exclude is None or not _entry_matches(tags, path, entry.exclude)
 
 
 class TagRouter(FileRouter):
@@ -153,6 +162,13 @@ class TagRouter(FileRouter):
                 f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
             )
         _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
+        root = os.path.abspath(self.matrix_config.source.path)
+        for entry in self.matrix_config.mp3_files:
+            for folder in entry.folders():
+                if not os.path.isdir(folder):
+                    raise ValueError(f"Folder {folder} is not an existing directory")
+                if not _in_folder(folder + os.sep, root):
+                    raise ValueError(f"Folder {folder} is not inside {root}")
 
     def _mp3_paths(self) -> list[str]:
         """Every non-excluded MP3 under the source directory."""
@@ -261,11 +277,14 @@ class TagRouter(FileRouter):
         No arguments are needed, as the matrix_config is already set in the constructor.
         """
         source_path = self.matrix_config.source.path
+        root = os.path.abspath(source_path)
         found = self._discover_tags(self._mp3_paths())
         for rel, (_, tags) in found.items():
             if tags is None:
                 continue  # No ID3 tag: this tool only works with tagged files.
+            absolute = os.path.join(root, rel)
             if any(
-                _entry_matches(tags, entry) for entry in self.matrix_config.mp3_files
+                _entry_matches(tags, absolute, entry)
+                for entry in self.matrix_config.mp3_files
             ):
                 yield File(path=os.path.join(source_path, rel))

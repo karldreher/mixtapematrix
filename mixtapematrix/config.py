@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -25,8 +26,8 @@ _STRICT = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
 class Mp3Match(BaseModel):
     """
-    A set of ID3 tags to match. A file is copied when any listed tag matches,
-    unless its exclude block matches.
+    A set of ID3 tags and a folder to match. A file is copied when any listed key
+    matches, unless its exclude block matches.
     """
 
     model_config = _STRICT
@@ -39,20 +40,42 @@ class Mp3Match(BaseModel):
     """Match files whose genre tag equals this value (case-insensitive)."""
     album_artist: str | None = None
     """Match files whose album artist tag equals this value (case-insensitive)."""
+    folder: str | None = None
+    """Match files beneath this absolute directory, which must be inside source_path.
+    Matched on whole path components, so /music/rock does not match /music/rockabilly.
+    Only tagged MP3s are copied, as with tags."""
     exclude: "Mp3Match | None" = None
-    """Files this entry would match are skipped when any tag listed here matches
-    (case-insensitive). Takes the same keys as an entry, including a nested exclude."""
+    """Files this entry would match are skipped when any key listed here matches
+    (tags case-insensitive). Takes the same keys as an entry, including a nested exclude."""
+
+    @field_validator("folder")
+    @classmethod
+    def validate_folder(cls, folder: str | None) -> str | None:
+        if folder is None:
+            return None
+        if not os.path.isabs(folder):
+            raise ValueError(
+                f"Folder '{folder}' must be an absolute path inside source_path."
+            )
+        return os.path.normpath(folder)
 
     @model_validator(mode="after")
-    def validate_exclude_has_tag(self) -> "Mp3Match":
-        has_tag = any((self.artist, self.album, self.genre, self.album_artist))
-        if self.exclude is not None and not has_tag:
+    def validate_exclude_has_key(self) -> "Mp3Match":
+        has_key = any(
+            (self.artist, self.album, self.genre, self.album_artist, self.folder)
+        )
+        if self.exclude is not None and not has_key:
             raise ValueError(
                 "An entry with an exclude block must also list at least one tag "
-                "(artist, album, genre, or album_artist) to match; "
+                "(artist, album, genre, or album_artist) or a folder to match; "
                 "'everything except X' is not supported."
             )
         return self
+
+    def folders(self) -> list[str]:
+        """Every folder this entry names, including those in nested excludes."""
+        own = [self.folder] if self.folder else []
+        return own + (self.exclude.folders() if self.exclude else [])
 
 
 class MatrixConfig(BaseModel):
@@ -117,7 +140,7 @@ class MatrixConfig(BaseModel):
         return [File(path=p) for p in self.exclude_paths if not is_glob(p)]
 
     mp3_files: list[Mp3Match]
-    """Tag matches; a file is copied when it matches any entry."""
+    """Tag and folder matches; a file is copied when it matches any entry."""
 
 
 class TransformConfig(BaseModel):
@@ -221,10 +244,14 @@ class ConfigFile(BaseModel):
         return (
             f"{modeline}"
             "# Each mp3_files entry is optional; keep the tags you want to match.\n"
-            "# exclude_paths removes locations; an entry's exclude: removes tags, e.g.\n"
+            "# A folder (absolute, inside source_path) matches every tagged MP3 beneath it.\n"
+            "# exclude_paths removes locations; an entry's exclude: removes tags or a folder, e.g.\n"
             "#   - artist: Artist Name\n"
             "#     exclude:\n"
             "#       album: Album Name\n"
+            "#   - folder: /path/to/source/Mixes\n"
+            "#     exclude:\n"
+            "#       genre: Podcast\n"
             f"{body}"
             "# Optional: shell commands to run after copying files.\n"
             "# transform:\n"
