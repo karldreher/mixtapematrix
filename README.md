@@ -47,18 +47,37 @@ matrix:
           artist: Artist B
           album: Album Name 2
       - artist: "Fear Factory"
+      # every tagged MP3 beneath a folder (an absolute path inside source_path, here /home/me/my-music)
+      - folder: /home/me/my-music/Mixes
 ```
 
 You can create a default config file with `mixtape init`.  This also writes `matrix.schema.json` next to it, and the config references it with a `# yaml-language-server: $schema=./matrix.schema.json` comment.  With the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, VS Code then highlights errors and offers completions and type hints for the config.  Pass `--no-json-schema` to skip the schema file and the comment, and `--force` to overwrite an existing `matrix.yaml`.
 
 Based on the config file, Mixtape Matrix will find any files in `source_path`, which match the directives in `mp3_files`.  If you want to keep funk and Fear Factory in your mixtape, the config file above is half-done for you!
 
+## Selecting a folder
+
+`folder` is a match key like `artist` or `album`, but it matches on **location**: every tagged MP3 beneath that directory, subdirectories included, whatever its tags say. It must be an absolute path to an existing directory inside `source_path`, or the run stops with an error before copying anything. It is matched on whole path components, so `/music/rock` never matches `/music/rockabilly`.
+
+```yaml
+mp3_files:
+  - folder: /music/library/Mixes
+  - folder: /music/library/Various
+    exclude:
+      genre: Podcast        # a folder entry may exclude tags
+  - artist: Aphrodite
+    exclude:
+      folder: /music/library/Aphrodite/Bootlegs   # and a tag entry may exclude a folder
+```
+
+`folder` does not change what is scanned. Only tagged `.mp3` files are discovered and copied, so untagged MP3s and other files in the folder (images, `.cue` sheets, `.DS_Store`) are left behind. An entry with several keys matches when any one of them does, and `exclude_paths` still removes locations first.
+
 ## Excluding files
 
 Two options leave files out, and they work at different levels:
 
 - `exclude_paths` (per matrix) works on **locations**. Each entry is a directory or file, and everything beneath it is skipped without being read. A plain entry matches whole path components, so `rock` never excludes `Crockett`, and relative paths work however `source_path` is written. Plain entries must exist. An entry may end in `**` to match by prefix: `/music/rock**` skips everything whose path starts with `/music/rock` (including `rockabilly`), and `/music/rock/**` skips everything beneath `/music/rock`. `**` is only supported at the end of an entry, and glob entries need not exist.
-- `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists.
+- `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, `folder`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists.
 
 Excludes are applied in order, path first and then tag:
 
