@@ -18,7 +18,7 @@ from pydantic import (
 )
 
 from .cache import TTL_PATTERN, parse_ttl
-from .routers.files import File, PathPattern, is_glob
+from .routers.files import File, PathPattern, is_glob, paths_overlap
 
 CONFIG_FILENAME = "matrix.yaml"
 SCHEMA_FILENAME = "matrix.schema.json"
@@ -217,6 +217,22 @@ class ConfigFile(BaseModel):
     Cache is an optional CacheConfig that stores discovered MP3 tags between runs,
     so repeat runs skip re-reading every file. Without it, no cache is read or written.
     """
+
+    @model_validator(mode="after")
+    def validate_destinations_outside_sources(self) -> "ConfigFile":
+        """Sources are read-only: no destination may be, or sit inside, any source."""
+        sources = [
+            (m.source_path, os.path.realpath(m.source_path)) for m in self.matrix
+        ]
+        for matrix_config in self.matrix:
+            destination = matrix_config.destination_path
+            real_destination = os.path.realpath(destination)
+            for source, real_source in sources:
+                if paths_overlap(real_destination, real_source):
+                    raise ValueError(
+                        f"Destination {destination} overlaps source {source}."
+                    )
+        return self
 
     @staticmethod
     def json_schema() -> dict:

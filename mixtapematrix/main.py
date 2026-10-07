@@ -1,17 +1,17 @@
-import os
 import subprocess
 from collections.abc import Iterator
 from functools import cached_property
 
 import click
 import yaml
+from pydantic import ValidationError
 
 from .cache import TAG_FIELDS, TagCache, TagField, Tags, clean_cache, tag_index
 from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
-from .routers.files import paths_overlap, prune_destination
+from .routers.files import prune_destination
 from .routers.mp3_router import TagRouter, _tag_matches, configure_tag_logging
 
 
@@ -65,20 +65,6 @@ class MixtapeMatrix:
             log=self.logger,
             debug=self.debug,
         )
-
-    def _check_destinations_safe(self):
-        """Sources are read-only: no destination may be, or sit inside, any source."""
-        sources = [m.source.path for m in self.config_data.matrix]
-        real_sources = [os.path.realpath(path) for path in sources]
-        for matrix_config in self.config_data.matrix:
-            destination = matrix_config.destination.path
-            real_destination = os.path.realpath(destination)
-            for source, real_source in zip(sources, real_sources, strict=True):
-                if paths_overlap(real_destination, real_source):
-                    raise click.ClickException(
-                        f"Refusing to run: destination {destination} overlaps "
-                        f"source {source}."
-                    )
 
     def _entries(self, where: list[tuple[TagField, str]]) -> Iterator[tuple[str, Tags]]:
         """
@@ -144,7 +130,6 @@ class MixtapeMatrix:
 
     def run(self):
         configure_tag_logging(self.verbose)
-        self._check_destinations_safe()
         # Destinations can be shared between matrices, so pruning waits until
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}
@@ -177,7 +162,23 @@ class MixtapeMatrix:
                 self.debug(f"Command executed: {command}")
 
 
-@click.group(invoke_without_command=True)
+class MixtapeGroup(click.Group):
+    def invoke(self, ctx: click.Context):
+        """Report an invalid config as a one-line error instead of a traceback."""
+        try:
+            return super().invoke(ctx)
+        except ValidationError as e:
+            problems = []
+            for error in e.errors():
+                message = error["msg"].removeprefix("Value error, ")
+                where = ".".join(map(str, error["loc"]))
+                problems.append(f"{where}: {message}" if where else message)
+            raise click.ClickException(
+                f"Invalid config: {'; '.join(problems)}"
+            ) from None
+
+
+@click.group(cls=MixtapeGroup, invoke_without_command=True)
 @click.pass_context
 def cli(ctx):
     """Copy and transform music files according to a matrix YAML config."""
