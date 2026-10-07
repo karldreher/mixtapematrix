@@ -3,7 +3,6 @@ from click.testing import CliRunner
 from helpers import make_mp3, write_config
 
 from mixtapematrix.main import cli
-from mixtapematrix.routers import mp3_router
 
 
 @pytest.fixture
@@ -167,17 +166,12 @@ def test_invalid_field_is_a_usage_error(tmp_path, library):
     assert result.exit_code == 2
 
 
-def test_describe_uses_the_cache(tmp_path, library, monkeypatch):
-    calls = []
-    real = mp3_router.read_tags
-    monkeypatch.setattr(
-        mp3_router, "read_tags", lambda p: (calls.append(p), real(p))[1]
-    )
+def test_describe_uses_the_cache(tmp_path, library, read_counter):
     first = describe(tmp_path, library, "artist")
-    assert len(calls) == 6
-    calls.clear()
+    assert len(read_counter) == 6
+    read_counter.clear()
     assert describe(tmp_path, library, "artist") == first
-    assert calls == []
+    assert read_counter == []
 
 
 def test_missing_config_fails_cleanly():

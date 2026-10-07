@@ -3,6 +3,7 @@ import os
 import struct
 
 import pytest
+from helpers import make_mp3
 
 from mixtapematrix.routers.files import File
 from mixtapematrix.routers.mp3_router import configure_tag_logging
@@ -20,17 +21,6 @@ def test_invalid_file():
 
 
 # TODO: test TagRouter, need fixture for some mp3 files
-
-
-def make_mp3(path, **tags):
-    from eyed3.id3 import Tag
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch()
-    tag = Tag()
-    for key, value in tags.items():
-        setattr(tag, key, value)
-    tag.save(str(path))
 
 
 @pytest.fixture
@@ -64,21 +54,6 @@ def make_router(tmp_path, library, mp3_files, cache=True, exclude_paths=()):
 
 def matched(router):
     return sorted(os.path.basename(f.path) for f in router.source)
-
-
-@pytest.fixture
-def read_counter(monkeypatch):
-    from mixtapematrix.routers import mp3_router
-
-    calls = []
-    real = mp3_router.read_tags
-
-    def counting(path):
-        calls.append(path)
-        return real(path)
-
-    monkeypatch.setattr(mp3_router, "read_tags", counting)
-    return calls
 
 
 def test_router_matches_without_cache(tmp_path, library, read_counter):

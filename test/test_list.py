@@ -3,7 +3,6 @@ from click.testing import CliRunner
 from helpers import make_mp3, write_config
 
 from mixtapematrix.main import cli
-from mixtapematrix.routers import mp3_router
 
 
 @pytest.fixture
@@ -15,19 +14,6 @@ def library(tmp_path):
     make_mp3(root / "plain.mp3")  # no tag
     make_mp3(root / "no_album.mp3", artist="Gamma")  # artist only
     return root
-
-
-@pytest.fixture
-def read_counter(monkeypatch):
-    calls = []
-    real = mp3_router.read_tags
-
-    def counting(path):
-        calls.append(path)
-        return real(path)
-
-    monkeypatch.setattr(mp3_router, "read_tags", counting)
-    return calls
 
 
 def list_tag(config, field, *args):

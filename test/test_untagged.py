@@ -6,7 +6,6 @@ from eyed3.id3 import Tag
 from helpers import cache_files, make_mp3, write_config
 
 from mixtapematrix.main import cli
-from mixtapematrix.routers import mp3_router
 
 
 @pytest.fixture
@@ -17,19 +16,6 @@ def library(tmp_path):
     make_mp3(root / "Zed.mp3")  # no tag
     make_mp3(root / "d" / "apple.mp3")  # no tag
     return root
-
-
-@pytest.fixture
-def read_counter(monkeypatch):
-    calls = []
-    real = mp3_router.read_tags
-
-    def counting(path):
-        calls.append(os.path.basename(path))
-        return real(path)
-
-    monkeypatch.setattr(mp3_router, "read_tags", counting)
-    return calls
 
 
 def untagged(tmp_path, library, *args):
@@ -71,7 +57,10 @@ def test_cached_tagged_files_are_skipped_and_untagged_are_reread(
     assert len(read_counter) == 4  # warms the cache: every file read once
     read_counter.clear()
     assert len(untagged(tmp_path, library)) == 2
-    assert sorted(read_counter) == ["Zed.mp3", "apple.mp3"]  # tagged ones skipped
+    assert sorted(os.path.basename(p) for p in read_counter) == [
+        "Zed.mp3",
+        "apple.mp3",
+    ]  # tagged ones skipped
 
 
 def test_cache_is_never_written(tmp_path, library):

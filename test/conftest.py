@@ -1,5 +1,7 @@
 from pytest import fixture
 
+from mixtapematrix.routers import mp3_router
+
 
 @fixture
 def mkdirs():
@@ -29,3 +31,17 @@ def isolated_home(tmp_path, monkeypatch):
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
+
+
+@fixture
+def read_counter(monkeypatch):
+    """The path of every file whose tags are read from disk, in call order."""
+    calls = []
+    real = mp3_router.read_tags
+
+    def counting(path):
+        calls.append(path)
+        return real(path)
+
+    monkeypatch.setattr(mp3_router, "read_tags", counting)
+    return calls

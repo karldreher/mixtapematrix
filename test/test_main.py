@@ -6,6 +6,7 @@ import click
 import pytest
 import yaml
 from click.testing import CliRunner
+from helpers import cache_files, make_mp3, write_config
 from jsonschema import Draft202012Validator
 
 from mixtapematrix.config import ConfigFile
@@ -156,38 +157,10 @@ def test_default_config_yaml_validates_against_schema(json_schema):
     ConfigFile.model_validate(data)
 
 
-def write_cache_config(tmp_path, ttl="1d"):
-    from eyed3.id3 import Tag
-
+def write_cache_config(tmp_path):
     source = tmp_path / "library"
-    source.mkdir()
-    (tmp_path / "out").mkdir()
-    song = source / "song.mp3"
-    song.touch()
-    tag = Tag()
-    tag.artist = "Alpha"
-    tag.save(str(song))
-    config = tmp_path / "matrix.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "matrix": [
-                    {
-                        "source_path": str(source),
-                        "destination_path": str(tmp_path / "out"),
-                        "mp3_files": [{"artist": "Alpha"}],
-                    }
-                ],
-                "cache": {"ttl": ttl},
-            }
-        )
-    )
-    return config
-
-
-def cache_files(tmp_path):
-    directory = tmp_path / "xdg-cache" / "mixtapematrix"
-    return sorted(directory.glob("*.mmcache")) if directory.exists() else []
+    make_mp3(source / "song.mp3", artist="Alpha")
+    return write_config(tmp_path, [source], mp3_files=[{"artist": "Alpha"}])
 
 
 def test_cache_block_accepted_and_in_schema():
@@ -243,14 +216,14 @@ def test_run_without_cache_block_writes_nothing(tmp_path):
     del data["cache"]
     config.write_text(yaml.safe_dump(data))
     assert CliRunner().invoke(cli, ["run", "--config", str(config)]).exit_code == 0
-    assert cache_files(tmp_path) == []
+    assert not cache_files(tmp_path)
 
 
 def test_run_no_cache_flag_bypasses_cache(tmp_path):
     config = write_cache_config(tmp_path)
     args = ["run", "--config", str(config), "--no-cache"]
     assert CliRunner().invoke(cli, args).exit_code == 0
-    assert cache_files(tmp_path) == []
+    assert not cache_files(tmp_path)
 
 
 def test_cache_clean_command(tmp_path):
@@ -264,7 +237,7 @@ def test_cache_clean_command(tmp_path):
     result = runner.invoke(cli, ["cache", "clean", "--all"])
     assert result.exit_code == 0
     assert "Removed 1 cache file(s)" in result.output
-    assert cache_files(tmp_path) == []
+    assert not cache_files(tmp_path)
 
 
 def test_cache_clean_with_no_cache_directory(tmp_path):
@@ -276,7 +249,7 @@ def test_cache_clean_with_no_cache_directory(tmp_path):
 def prune_config(tmp_path, destinations=None):
     """write_cache_config plus stale files in the destination."""
     config = write_cache_config(tmp_path)
-    out = tmp_path / "out"
+    out = tmp_path / "out0"
     (out / "old").mkdir()
     (out / "old" / "gone.mp3").touch()
     (out / "notes.txt").touch()
@@ -304,12 +277,7 @@ def test_run_prune_shared_destination_keeps_all_matrix_output(tmp_path):
     data = yaml.safe_load(config.read_text())
     second = tmp_path / "library2"
     second.mkdir()
-    from eyed3.id3 import Tag
-
-    (second / "other.mp3").touch()
-    tag = Tag()
-    tag.artist = "Beta"
-    tag.save(str(second / "other.mp3"))
+    make_mp3(second / "other.mp3", artist="Beta")
     data["matrix"].append(
         {
             "source_path": str(second),
@@ -498,19 +466,7 @@ def test_overlapping_config_reports_one_line_without_traceback(tmp_path):
 
 def path_config(tmp_path, source, destination):
     config = tmp_path / "matrix.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "matrix": [
-                    {
-                        "source_path": str(source),
-                        "destination_path": str(destination),
-                        "mp3_files": [{"artist": "Alpha"}],
-                    }
-                ]
-            }
-        )
-    )
+    config.write_text(yaml.safe_dump(overlap_config((source, destination))))
     return config
 
 
