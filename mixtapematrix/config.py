@@ -2,6 +2,7 @@ import json
 import os
 import sys
 from datetime import timedelta
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -137,15 +138,18 @@ class MatrixConfig(BaseModel):
 
     # While the input source_path, destination_.., and exclude_.. are strings,
     # the properties source, destination, and excluded_files are File objects
+    # source and destination are built once and never touch the filesystem: the
+    # default config names paths that do not exist, so ConfigFile.check_paths
+    # verifies them, once, when a command needs the real directories.
     @computed_field
-    @property
+    @cached_property
     def source(self) -> File:
-        return File(path=self.source_path)
+        return File.model_construct(path=self.source_path)
 
     @computed_field
-    @property
+    @cached_property
     def destination(self) -> File:
-        return File(path=self.destination_path)
+        return File.model_construct(path=self.destination_path)
 
     @computed_field
     @property
@@ -233,6 +237,23 @@ class ConfigFile(BaseModel):
                         f"Destination {destination} overlaps source {source}."
                     )
         return self
+
+    def check_paths(self) -> None:
+        """
+        Require every source_path and destination_path to be an existing directory.
+        This is separate from validation because the default config, which must
+        validate, uses placeholder paths. Raises a one-line ClickException.
+        """
+        for i, matrix in enumerate(self.matrix):
+            for field in ("source_path", "destination_path"):
+                path = getattr(matrix, field)
+                if not os.path.exists(path):
+                    problem = "does not exist"
+                elif not os.path.isdir(path):
+                    problem = "is not a directory"
+                else:
+                    continue
+                raise click.ClickException(f"matrix[{i}].{field}: {path} {problem}")
 
     @staticmethod
     def json_schema() -> dict:
