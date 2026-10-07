@@ -39,7 +39,7 @@ matrix:
     exclude_paths:
       - ./my-music/Podcasts
       - "./my-music/Huey Luis"
-    destination_path: /example/destination/path
+    destination_path: ./my-mixtape
     mp3_files: 
       # all funk, except tracks by one artist or from one album
       - genre: funk
@@ -98,6 +98,8 @@ mixtape run
 # Use --no-cache to ignore the tag cache for one run.
 # Use --prune to delete destination files that no matrix copied (off by default).
 ```
+`source_path` and `destination_path` must be existing directories; a missing path or a file stops the command with a one-line error before any work starts. Mixtape Matrix does not create the destination for you.
+
 After running, this will send the files from `source_path` to `destination_path` accordingly.
 
 Running a second `mixtape` command while one is active prints a warning and carries on. Concurrent runs are discouraged, since they can overwrite each other's cache. Detection is held in memory by the OS, scoped to your user, and creates no files: on macOS and Linux it is a kernel lock on your home directory, and on Windows a named mutex. It is released automatically if a run is killed, so it cannot go stale.
