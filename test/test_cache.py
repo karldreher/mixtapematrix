@@ -1,8 +1,13 @@
 import os
 import random
+import struct
+import time
 from datetime import timedelta
 
+import ormsgpack
 import pytest
+from click.testing import CliRunner
+from compression import zstd
 
 from mixtapematrix import cache as cache_module
 from mixtapematrix.cache import (
@@ -14,8 +19,10 @@ from mixtapematrix.cache import (
     cache_dir,
     cache_key,
     clean_cache,
+    list_cache,
     parse_ttl,
 )
+from mixtapematrix.main import cli
 
 NOW = 1_800_000_000
 
@@ -125,6 +132,88 @@ def test_schema_version_mismatch_is_deleted(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_module, "CACHE_SCHEMA_VERSION", CACHE_SCHEMA_VERSION + 1)
     assert cache.load() == {}
     assert not cache.path.exists()
+
+
+HEADER = {
+    "version": CACHE_SCHEMA_VERSION,
+    "created_at": NOW,
+    "ttl_seconds": 172800,
+    "config_path": "/cfg/matrix.yaml",
+    "source_root": "/lib",
+}
+BODY = {
+    "strings": ["Album", "Artist"],
+    "paths": ["a.mp3", "b.mp3"],
+    "mtime": [10, 5],
+    "artist": [1, -2],
+    "album": [0, -2],
+    "genre": [-1, -2],
+    "album_artist": [-1, -2],
+}
+
+
+def write_raw(cache, header=HEADER, body=BODY):
+    packed = ormsgpack.packb(header)
+    payload = zstd.compress(ormsgpack.packb(body))
+    cache.path.parent.mkdir(parents=True, exist_ok=True)
+    cache.path.write_bytes(struct.pack(">I", len(packed)) + packed + payload)
+
+
+def test_valid_raw_cache_loads(tmp_path):
+    cache = make_cache(tmp_path)
+    write_raw(cache)
+    assert cache.load() == {
+        "a.mp3": (10, ("Artist", "Album", None, None)),
+        "b.mp3": (15, None),
+    }
+
+
+BAD_HEADERS = {
+    "wrong type": {**HEADER, "created_at": "yesterday"},
+    "bool for int": {**HEADER, "version": True},
+    "missing key": {k: v for k, v in HEADER.items() if k != "source_root"},
+    "extra key": {**HEADER, "owner": "someone"},
+}
+
+BAD_BODIES = {
+    "tag id out of range": {**BODY, "artist": [2, -2]},
+    "tag id below -2": {**BODY, "genre": [-3, -2]},
+    "non-int tag id": {**BODY, "album": ["Album", -2]},
+    "non-string in strings": {**BODY, "strings": ["Album", 7]},
+    "non-string path": {**BODY, "paths": ["a.mp3", None]},
+    "non-int mtime": {**BODY, "mtime": [10, 5.5]},
+    "mismatched mtime length": {**BODY, "mtime": [10]},
+    "mismatched column length": {**BODY, "album_artist": [-1]},
+    "missing column": {k: v for k, v in BODY.items() if k != "genre"},
+    "extra key": {**BODY, "comment": []},
+}
+
+
+@pytest.mark.parametrize("header", BAD_HEADERS.values(), ids=BAD_HEADERS)
+def test_invalid_header_is_deleted_and_reported(tmp_path, header):
+    messages = []
+    cache = make_cache(tmp_path, log=messages.append)
+    write_raw(cache, header=header)
+    assert cache.load() == {}
+    assert not cache.path.exists()
+    assert any("unreadable" in m for m in messages)
+
+
+@pytest.mark.parametrize("body", BAD_BODIES.values(), ids=BAD_BODIES)
+def test_invalid_body_is_deleted_and_reported(tmp_path, body):
+    messages = []
+    cache = make_cache(tmp_path, log=messages.append)
+    write_raw(cache, body=body)
+    assert cache.load() == {}
+    assert not cache.path.exists()
+    assert any("unreadable" in m for m in messages)
+
+
+@pytest.mark.parametrize("header", BAD_HEADERS.values(), ids=BAD_HEADERS)
+def test_clean_reports_invalid_header_as_unreadable(tmp_path, header):
+    cache = make_cache(tmp_path)
+    write_raw(cache, header=header)
+    assert [r.reason for r in clean_cache(now=lambda: NOW)] == ["unreadable"]
 
 
 def test_save_is_atomic_and_leaves_no_temp_files(tmp_path):
@@ -265,3 +354,32 @@ def test_clean_does_not_follow_symlinks(tmp_path):
     (directory / f"link{CACHE_SUFFIX}").symlink_to(outside)
     assert clean_cache(all_files=True) == []
     assert outside.exists()
+
+
+def test_list_reports_status_and_header(tmp_path):
+    ok = write_cache_file(tmp_path, "ok.yaml")
+    expired = write_cache_file(tmp_path, "old.yaml", ttl="1h", now=NOW - 7200)
+    bad = write_cache_file(tmp_path, "bad.yaml")
+    bad.path.write_bytes(b"junk")
+    (cache_dir() / f"stray{TMP_SUFFIX}").write_bytes(b"partial")
+    listed = {i.name: i for i in list_cache(now=lambda: NOW)}
+    assert {n: i.status for n, i in listed.items()} == {
+        ok.path.name: "ok",
+        expired.path.name: "expired",
+        bad.path.name: "unreadable",
+    }
+    assert listed[ok.path.name].header.source_root == str(ok.source_root)
+    assert listed[bad.path.name].header is None
+    assert all(i.size > 0 for i in listed.values())
+
+
+def test_list_with_missing_directory_is_empty():
+    assert list_cache() == []
+
+
+def test_list_command_output(tmp_path):
+    assert CliRunner().invoke(cli, ["cache", "list"]).output == "No cache files\n"
+    cache = write_cache_file(tmp_path, "a.yaml", now=time.time())
+    out = CliRunner().invoke(cli, ["cache", "list"]).output
+    assert out.startswith(f"{cache.path.name}  ok  ")
+    assert f"{cache.source_root}  (config: {cache.config_path})" in out

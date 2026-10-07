@@ -11,6 +11,7 @@ from mixtapematrix.main import cli
 COMMANDS = [
     ["run", "--config", "missing.yaml"],
     ["init"],
+    ["cache", "list"],
     ["cache", "clean"],
     ["cache", "clean", "--all"],
 ]

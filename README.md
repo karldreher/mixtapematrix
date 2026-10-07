@@ -190,4 +190,4 @@ matrix:
 - **The cache belongs to the config file:** each cache is keyed by the config file's path and the `source_path`, so two config files never share or overwrite a cache. Moving or renaming a config file starts a new cache, and the old one is left behind until you clean it up.
 - **Where it lives:** `$XDG_CACHE_HOME/mixtapematrix/` (`~/.cache/mixtapematrix/` by default), never next to your config or music. The files are compressed and small: roughly 27 bytes per track, so a 5,000-track library takes about 150 KiB.
 
-Clean up with `mixtape cache clean`, which removes expired caches, caches whose config file or source path no longer exists, and unreadable ones. Use `mixtape cache clean --all` to remove every cache.
+`mixtape cache list` shows each cache with its status (`ok`, or why `cache clean` would remove it), size, source path and config file. Clean up with `mixtape cache clean`, which removes expired caches, caches whose config file or source path no longer exists, and unreadable ones. Use `mixtape cache clean --all` to remove every cache.
