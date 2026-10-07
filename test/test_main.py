@@ -328,8 +328,8 @@ def test_run_refuses_destination_inside_source_without_prune(tmp_path):
     assert list(nested.iterdir()) == []
 
 
-def test_legacy_exclude_path_rejected_with_migration_message():
-    with pytest.raises(ValueError, match="exclude_paths") as error:
+def test_legacy_exclude_path_is_rejected_as_an_unknown_key():
+    with pytest.raises(ValueError, match="exclude_path"):
         ConfigFile.model_validate(
             {
                 "matrix": [
@@ -342,7 +342,6 @@ def test_legacy_exclude_path_rejected_with_migration_message():
                 ]
             }
         )
-    assert "- a/skip" in str(error.value)
 
 
 def test_exclude_only_entry_rejected():

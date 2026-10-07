@@ -124,16 +124,6 @@ class MatrixConfig(BaseModel):
     destination_path: str
     """Destination path is the directory to copy files to."""
 
-    @model_validator(mode="before")
-    @classmethod
-    def reject_legacy_exclude_path(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "exclude_path" in data:
-            raise ValueError(
-                "'exclude_path' was replaced by 'exclude_paths', a list. "
-                f"Use:\n  exclude_paths:\n    - {data['exclude_path']}"
-            )
-        return data
-
     mp3_files: list[Mp3Match]
     """Tag and folder matches; a file is copied when it matches any entry."""
 
