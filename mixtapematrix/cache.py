@@ -15,13 +15,21 @@ import tempfile
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import timedelta
+from itertools import accumulate
 from pathlib import Path
-from typing import Literal, get_args
+from typing import Literal, Self, get_args
 
 import ormsgpack
 from compression import zstd
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    create_model,
+    model_validator,
+)
 
 # Internal cache layout version (not user-configurable). Bump it whenever the
 # cached properties or their encoding change (e.g. adding a tag field), so older
@@ -103,8 +111,14 @@ def cache_key(config_path: Path, source_root: Path) -> str:
     return hashlib.sha256(identity.encode()).hexdigest()
 
 
-@dataclass(frozen=True)
-class CacheHeader:
+# Strict types and no extra keys: a file that does not match is rejected with a
+# ValueError, which callers treat as unreadable.
+_STRICT = ConfigDict(strict=True, extra="forbid", frozen=True)
+
+
+class CacheHeader(BaseModel):
+    model_config = _STRICT
+
     version: int
     created_at: int
     ttl_seconds: int
@@ -115,10 +129,48 @@ class CacheHeader:
         return now - self.created_at >= ttl_seconds
 
 
+class _CacheBody(BaseModel):
+    """The decoded body: `strings`, `paths`, `mtime`, and one column per tag field."""
+
+    model_config = _STRICT
+
+    strings: list[str]
+    paths: list[str]
+    mtime: list[int]
+
+    @model_validator(mode="after")
+    def _check_columns(self) -> Self:
+        # Whole-column checks, so large libraries never pay for per-row Python.
+        columns = [getattr(self, field) for field in TAG_FIELDS]
+        if any(len(column) != len(self.paths) for column in [self.mtime, *columns]):
+            raise ValueError("cache columns have mismatched lengths")
+        # Tag ids repeat heavily, so the distinct set is small enough to check one by one.
+        ids = set().union(*columns)
+        if not all(type(i) is int and _NO_TAG <= i < len(self.strings) for i in ids):
+            raise ValueError("cache tag ids must be -2, -1, or an index into strings")
+        return self
+
+
+CacheBody = create_model(
+    "CacheBody",
+    __base__=_CacheBody,
+    **{field: (list, ...) for field in TAG_FIELDS},
+)
+
+
+def _validate[M: BaseModel](model: type[M], raw: object) -> M:
+    try:
+        return model.model_validate(raw)
+    except ValidationError as e:
+        # Report one error: a corrupt column can produce one per row.
+        error = e.errors(include_url=False)[0]
+        loc = ".".join(map(str, error["loc"]))
+        raise ValueError(f"invalid {model.__name__} {loc}: {error['msg']}") from None
+
+
 def _read_header(f) -> CacheHeader:
     (length,) = _HEADER_LEN.unpack(f.read(_HEADER_LEN.size))
-    # A header with missing or extra keys raises TypeError, which callers treat as unreadable.
-    return CacheHeader(**ormsgpack.unpackb(f.read(length)))
+    return _validate(CacheHeader, ormsgpack.unpackb(f.read(length)))
 
 
 def _encode(entries: dict[str, Entry]) -> bytes:
@@ -153,21 +205,20 @@ def _encode(entries: dict[str, Entry]) -> bytes:
 
 
 def _decode(data: bytes) -> dict[str, Entry]:
-    body = ormsgpack.unpackb(zstd.decompress(data))
-    strings, paths, mtimes = body["strings"], body["paths"], body["mtime"]
-    columns = [body[field] for field in TAG_FIELDS]
-    if any(len(column) != len(paths) for column in [mtimes, *columns]):
-        raise ValueError("cache columns have mismatched lengths")
-    lookup = [*strings, None, None]  # _NO_TAG (-2) and _ABSENT (-1) index the Nones
-    resolved = zip(*([lookup[t] for t in column] for column in columns), strict=True)
-    entries: dict[str, Entry] = {}
-    mtime = 0
-    for path, delta, first, tags in zip(
-        paths, mtimes, columns[0], resolved, strict=True
-    ):
-        mtime += delta
-        entries[path] = (mtime, None if first == _NO_TAG else tags)
-    return entries
+    body = _validate(CacheBody, ormsgpack.unpackb(zstd.decompress(data)))
+    columns = [getattr(body, field) for field in TAG_FIELDS]
+    lookup = [
+        *body.strings,
+        None,
+        None,
+    ]  # _NO_TAG (-2) and _ABSENT (-1) index the Nones
+    rows = zip(*(map(lookup.__getitem__, column) for column in columns), strict=True)
+    return {
+        path: (mtime, None if first == _NO_TAG else tags)
+        for path, mtime, first, tags in zip(
+            body.paths, accumulate(body.mtime), columns[0], rows, strict=True
+        )
+    }
 
 
 class TagCache:
@@ -227,15 +278,13 @@ class TagCache:
         """Write the cache atomically. Failing to write is reported, not fatal."""
         # Rewrites keep the original created_at so the cache still expires on schedule.
         header = ormsgpack.packb(
-            asdict(
-                CacheHeader(
-                    version=CACHE_SCHEMA_VERSION,
-                    created_at=self._created_at or int(self.now()),
-                    ttl_seconds=int(self.ttl.total_seconds()),
-                    config_path=str(self.config_path),
-                    source_root=str(self.source_root),
-                )
-            )
+            CacheHeader(
+                version=CACHE_SCHEMA_VERSION,
+                created_at=self._created_at or int(self.now()),
+                ttl_seconds=int(self.ttl.total_seconds()),
+                config_path=str(self.config_path),
+                source_root=str(self.source_root),
+            ).model_dump()
         )
         payload = _HEADER_LEN.pack(len(header)) + header + _encode(entries)
         tmp = None

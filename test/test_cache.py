@@ -1,8 +1,12 @@
+import base64
 import os
 import random
+import struct
 from datetime import timedelta
 
+import ormsgpack
 import pytest
+from compression import zstd
 
 from mixtapematrix import cache as cache_module
 from mixtapematrix.cache import (
@@ -125,6 +129,103 @@ def test_schema_version_mismatch_is_deleted(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_module, "CACHE_SCHEMA_VERSION", CACHE_SCHEMA_VERSION + 1)
     assert cache.load() == {}
     assert not cache.path.exists()
+
+
+# Written by TagCache.save before cache validation existed (ENTRIES, ttl 2d, NOW).
+LEGACY_CACHE = base64.b64decode(
+    "AAAAWYWndmVyc2lvbgGqY3JlYXRlZF9hdM5rSdIAq3R0bF9zZWNvbmRzzgACowCrY29uZmlnX3BhdGiw"
+    "L2NmZy9tYXRyaXgueWFtbKtzb3VyY2Vfcm9vdKQvbGliKLUv/SCVRQQAcsccIKDt/v9YbFXRPcG2ZwNA"
+    "GUlEN9rWJkBbtOOlM/H36t9kXTibsJ/BtnmyD++U7so7AOza0VLrTGpFYqS0SPqmDeS2+D7mNkN/OCB1"
+    "/VE/pMKGnaijfltDXyuuLermynjRZC3c6/tZ6bDlSArP9DPd/NrDAgYASKVw0zXFBcGw5Jy3t1aBAg=="
+)
+
+HEADER = {
+    "version": CACHE_SCHEMA_VERSION,
+    "created_at": NOW,
+    "ttl_seconds": 172800,
+    "config_path": "/cfg/matrix.yaml",
+    "source_root": "/lib",
+}
+BODY = {
+    "strings": ["Album", "Artist"],
+    "paths": ["a.mp3", "b.mp3"],
+    "mtime": [10, 5],
+    "artist": [1, -2],
+    "album": [0, -2],
+    "genre": [-1, -2],
+    "album_artist": [-1, -2],
+}
+
+
+def write_raw(cache, header=HEADER, body=BODY):
+    packed = ormsgpack.packb(header)
+    payload = zstd.compress(ormsgpack.packb(body))
+    cache.path.parent.mkdir(parents=True, exist_ok=True)
+    cache.path.write_bytes(struct.pack(">I", len(packed)) + packed + payload)
+
+
+def test_cache_written_before_validation_still_loads(tmp_path):
+    cache = make_cache(tmp_path)
+    cache.path.parent.mkdir(parents=True)
+    cache.path.write_bytes(LEGACY_CACHE)
+    assert cache.load() == ENTRIES
+
+
+def test_valid_raw_cache_loads(tmp_path):
+    cache = make_cache(tmp_path)
+    write_raw(cache)
+    assert cache.load() == {
+        "a.mp3": (10, ("Artist", "Album", None, None)),
+        "b.mp3": (15, None),
+    }
+
+
+BAD_HEADERS = {
+    "wrong type": {**HEADER, "created_at": "yesterday"},
+    "bool for int": {**HEADER, "version": True},
+    "missing key": {k: v for k, v in HEADER.items() if k != "source_root"},
+    "extra key": {**HEADER, "owner": "someone"},
+}
+
+BAD_BODIES = {
+    "tag id out of range": {**BODY, "artist": [2, -2]},
+    "tag id below -2": {**BODY, "genre": [-3, -2]},
+    "non-int tag id": {**BODY, "album": ["Album", -2]},
+    "non-string in strings": {**BODY, "strings": ["Album", 7]},
+    "non-string path": {**BODY, "paths": ["a.mp3", None]},
+    "non-int mtime": {**BODY, "mtime": [10, 5.5]},
+    "mismatched mtime length": {**BODY, "mtime": [10]},
+    "mismatched column length": {**BODY, "album_artist": [-1]},
+    "missing column": {k: v for k, v in BODY.items() if k != "genre"},
+    "extra key": {**BODY, "comment": []},
+}
+
+
+@pytest.mark.parametrize("header", BAD_HEADERS.values(), ids=BAD_HEADERS)
+def test_invalid_header_is_deleted_and_reported(tmp_path, header):
+    messages = []
+    cache = make_cache(tmp_path, log=messages.append)
+    write_raw(cache, header=header)
+    assert cache.load() == {}
+    assert not cache.path.exists()
+    assert any("unreadable" in m for m in messages)
+
+
+@pytest.mark.parametrize("body", BAD_BODIES.values(), ids=BAD_BODIES)
+def test_invalid_body_is_deleted_and_reported(tmp_path, body):
+    messages = []
+    cache = make_cache(tmp_path, log=messages.append)
+    write_raw(cache, body=body)
+    assert cache.load() == {}
+    assert not cache.path.exists()
+    assert any("unreadable" in m for m in messages)
+
+
+@pytest.mark.parametrize("header", BAD_HEADERS.values(), ids=BAD_HEADERS)
+def test_clean_reports_invalid_header_as_unreadable(tmp_path, header):
+    cache = make_cache(tmp_path)
+    write_raw(cache, header=header)
+    assert [r.reason for r in clean_cache(now=lambda: NOW)] == ["unreadable"]
 
 
 def test_save_is_atomic_and_leaves_no_temp_files(tmp_path):
