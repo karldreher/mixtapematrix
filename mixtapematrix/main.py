@@ -6,7 +6,7 @@ from functools import cached_property
 import click
 import yaml
 
-from .cache import TAG_FIELDS, TagCache, Tags, clean_cache
+from .cache import TAG_FIELDS, TagCache, TagField, Tags, clean_cache, tag_index
 from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
@@ -80,12 +80,14 @@ class MixtapeMatrix:
                         f"source {source}."
                     )
 
-    def _entries(self, where: list[tuple[str, str]]) -> Iterator[tuple[str, Tags]]:
+    def _entries(self, where: list[tuple[TagField, str]]) -> Iterator[tuple[str, Tags]]:
         """
         (path, tags) of every tagged MP3 in every matrix source, ignoring the matrix
         mp3_files filters. `where` pairs tag names with values; only files matching
         every pair (case-insensitive) are yielded.
         """
+        for key, _ in where:
+            tag_index(key)
         configure_tag_logging(self.verbose)
         for matrix_config in self.config_data.matrix:
             router = TagRouter(
@@ -97,12 +99,14 @@ class MixtapeMatrix:
                 if all(_tag_matches(tags, k, v) for k, v in where):
                     yield path, tags
 
-    def list_tag(self, field: str, where: dict[str, str] | None = None) -> list[str]:
+    def list_tag(
+        self, field: TagField, where: dict[TagField, str] | None = None
+    ) -> list[str]:
         """
         Distinct values of a tag across every matrix source, sorted. `where` maps
         tag names to values; only files matching every one (case-insensitive) count.
         """
-        index = TAG_FIELDS.index(field)
+        index = tag_index(field)
         spellings: dict[str, set[str]] = {}  # casefolded -> every spelling seen
         for _, tags in self._entries(list((where or {}).items())):
             if value := tags[index]:
@@ -112,9 +116,9 @@ class MixtapeMatrix:
 
     def describe_tag(
         self,
-        field: str,
+        field: TagField,
         value: str | None = None,
-        where: dict[str, str] | None = None,
+        where: dict[TagField, str] | None = None,
     ) -> list[str]:
         """
         Sections headed by each value of FIELD (or just VALUE), with the rest of
@@ -273,7 +277,7 @@ def _refresh_option(func):
     )(func)
 
 
-def _filters(options: dict) -> dict[str, str]:
+def _filters(options: dict) -> dict[TagField, str]:
     """The --<tag> filters that were given, keyed by tag name."""
     return {
         name: options[f"filter_{name}"]

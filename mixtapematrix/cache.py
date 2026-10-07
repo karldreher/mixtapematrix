@@ -18,6 +18,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from typing import Literal, get_args
 
 import ormsgpack
 from compression import zstd
@@ -27,7 +28,20 @@ from compression import zstd
 # caches are discarded and rebuilt.
 CACHE_SCHEMA_VERSION = 1
 
-TAG_FIELDS = ("artist", "album", "genre", "album_artist")
+TagField = Literal["artist", "album", "genre", "album_artist"]
+# Order matters: Tags is positional and the cache stores one column per field in it.
+TAG_FIELDS: tuple[TagField, ...] = get_args(TagField)
+
+
+def tag_index(field: str) -> int:
+    """The position of a tag field in Tags; unknown names raise a ValueError naming them."""
+    try:
+        return TAG_FIELDS.index(field)
+    except ValueError:
+        raise ValueError(
+            f"Unknown tag field {field!r}; expected one of {', '.join(TAG_FIELDS)}"
+        ) from None
+
 
 CACHE_SUFFIX = ".mmcache"
 TMP_SUFFIX = ".mmcache.tmp"
