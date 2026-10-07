@@ -3,9 +3,6 @@
 matrix.yaml
 matrix.schema.json
 
-# Allow the test file.
-!test/matrix.yaml
-
 # Stupid crap 
 *.DS_Store
 

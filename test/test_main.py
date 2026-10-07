@@ -13,27 +13,46 @@ from mixtapematrix.config import ConfigFile, MatrixConfig, Mp3Match
 from mixtapematrix.main import MixtapeMatrix, cli
 
 
-def test_config(mkdirs):
-    matrix = MixtapeMatrix("test/matrix.yaml")
-    # This actually gets pretty far, because the ConfigFile model is highly validated.
-    assert matrix.config_data
-    assert matrix.config_data.matrix[0].source.path == "test/source"
-    assert matrix.config_data.matrix[0].destination.path == "test/output"
+def transform_config(tmp_path, *commands):
+    source, destination = tmp_path / "source", tmp_path / "output"
+    (source / "exclude").mkdir(parents=True)
+    destination.mkdir()
+    config = tmp_path / "matrix.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "matrix": [
+                    {
+                        "source_path": str(source),
+                        "exclude_paths": [str(source / "exclude")],
+                        "destination_path": str(destination),
+                        "mp3_files": [{"genre": "funk"}, {"artist": "Fear Factory"}],
+                    }
+                ],
+                "transform": {"commands": list(commands)},
+            }
+        )
+    )
+    return config
+
+
+def test_config(tmp_path):
+    config = MixtapeMatrix(str(transform_config(tmp_path, "true"))).config_data
+    assert config.matrix[0].source.path == str(tmp_path / "source")
+    assert config.matrix[0].destination.path == str(tmp_path / "output")
+    assert config.transform.commands == ["true"]
 
 
 def test_invalid_config():
     with pytest.raises(ValueError):
-        _ = MixtapeMatrix("test/invalid.yaml").config_data
-
-
-def test_valid_transform(mkdirs):
-    matrix = MixtapeMatrix("test/matrix.yaml")
-    assert matrix.config_data.transform.commands == ['echo "Files copied successfully"']
+        ConfigFile.model_validate({"rotten": ["anything"]})
 
 
 def test_dangerous_transform():
-    with pytest.raises(ValueError):
-        _ = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
+    with pytest.raises(ValueError, match="dangerous"):
+        ConfigFile.model_validate(
+            {"matrix": [], "transform": {"commands": ["rm -rf /"]}}
+        )
 
 
 def test_cli():
@@ -68,9 +87,12 @@ def test_list_tag_missing_config_fails_cleanly():
     assert not isinstance(result.exception, FileNotFoundError)
 
 
-def test_run_with_config(mkdirs):
-    result = CliRunner().invoke(cli, ["run", "--config", "test/matrix.yaml"])
+def test_run_executes_transform_commands(tmp_path):
+    marker = tmp_path / "ran"
+    config = transform_config(tmp_path, f"touch {marker}")
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
     assert result.exit_code == 0, result.output
+    assert marker.exists()
 
 
 def test_init_creates_config_once(tmp_path, monkeypatch):
@@ -336,11 +358,11 @@ def test_exclude_only_entry_rejected():
     Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
 
 
-def test_missing_exclude_path_fails_when_files_are_built(mkdirs):
+def test_missing_exclude_path_fails_when_files_are_built(tmp_path):
     matrix = MatrixConfig(
-        source_path="test/source",
-        exclude_paths=["test/source/missing"],
-        destination_path="test/output",
+        source_path=str(tmp_path),
+        exclude_paths=[str(tmp_path / "missing")],
+        destination_path=str(tmp_path),
         mp3_files=[{"artist": "x"}],
     )
     with pytest.raises(ValueError, match="does not exist"):

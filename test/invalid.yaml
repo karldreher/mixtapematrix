@@ -1,3 +1,0 @@
-rotten:
-  # A clearly invalid config which should be rejected.
-  - anything

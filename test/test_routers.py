@@ -9,15 +9,15 @@ from mixtapematrix.routers.files import File
 from mixtapematrix.routers.mp3_router import configure_tag_logging
 
 
-def test_file(mkdirs):
-    file = File(path="test/source")
+def test_file(tmp_path):
+    file = File(path=str(tmp_path))
     assert file.is_dir
     assert not file.is_file
 
 
-def test_invalid_file():
+def test_invalid_file(tmp_path):
     with pytest.raises(ValueError):
-        File(path="test/source/invalid")
+        File(path=str(tmp_path / "invalid"))
 
 
 # TODO: test TagRouter, need fixture for some mp3 files
