@@ -33,14 +33,8 @@ TagField = Literal["artist", "album", "genre", "album_artist"]
 TAG_FIELDS: tuple[TagField, ...] = get_args(TagField)
 
 
-def tag_index(field: str) -> int:
-    """The position of a tag field in Tags; unknown names raise a ValueError naming them."""
-    try:
-        return TAG_FIELDS.index(field)
-    except ValueError:
-        raise ValueError(
-            f"Unknown tag field {field!r}; expected one of {', '.join(TAG_FIELDS)}"
-        ) from None
+TAG_INDEX: dict[TagField, int] = {field: i for i, field in enumerate(TAG_FIELDS)}
+"""The position of each tag field in Tags."""
 
 
 CACHE_SUFFIX = ".mmcache"

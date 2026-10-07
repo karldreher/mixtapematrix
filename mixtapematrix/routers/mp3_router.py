@@ -7,7 +7,7 @@ from contextvars import ContextVar
 import click
 from eyed3.id3 import Genre, Tag
 
-from ..cache import TAG_FIELDS, Entry, TagCache, TagField, Tags, tag_index
+from ..cache import TAG_FIELDS, TAG_INDEX, Entry, TagCache, TagField, Tags
 from ..config import MatrixConfig, Mp3Match
 from ..progress import ProgressFactory, no_progress
 from .files import (
@@ -95,7 +95,7 @@ def read_tags(path: str) -> Tags | None:
 
 def _tag_matches(tags: Tags, key: TagField, value: str) -> bool:
     """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
-    tag_value = tags[tag_index(key)]
+    tag_value = tags[TAG_INDEX[key]]
     return tag_value is not None and tag_value.lower() == value.lower()
 
 

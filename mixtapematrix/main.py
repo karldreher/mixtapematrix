@@ -7,7 +7,7 @@ import click
 import yaml
 from pydantic import ValidationError
 
-from .cache import TAG_FIELDS, TagCache, TagField, Tags, clean_cache, tag_index
+from .cache import TAG_FIELDS, TAG_INDEX, TagCache, TagField, Tags, clean_cache
 from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
@@ -81,8 +81,6 @@ class MixtapeMatrix:
         mp3_files filters. `where` pairs tag names with values; only files matching
         every pair (case-insensitive) are yielded.
         """
-        for key, _ in where:
-            tag_index(key)
         for _, router in self._routers():
             for path, tags in router.entries(refresh=self.refresh):
                 if all(_tag_matches(tags, k, v) for k, v in where):
@@ -95,7 +93,7 @@ class MixtapeMatrix:
         Distinct values of a tag across every matrix source, sorted. `where` maps
         tag names to values; only files matching every one (case-insensitive) count.
         """
-        index = tag_index(field)
+        index = TAG_INDEX[field]
         spellings: dict[str, set[str]] = {}  # casefolded -> every spelling seen
         for _, tags in self._entries(list((where or {}).items())):
             if value := tags[index]:
