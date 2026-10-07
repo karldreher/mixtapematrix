@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 import click
 import pytest
@@ -195,13 +196,24 @@ def test_cache_block_accepted_and_in_schema():
     config = ConfigFile.model_validate(
         {"matrix": [], "cache": {"ttl": "2d"}},
     )
-    assert config.cache.ttl == "2d"
+    assert config.cache.ttl == timedelta(days=2)
     assert ConfigFile.model_validate({"matrix": []}).cache is None
 
 
 @pytest.mark.parametrize("ttl", ["0h", "1.5d", "1h30m", "2y", "1M", "abc", ""])
 def test_invalid_ttl_rejected(ttl):
     with pytest.raises(ValueError, match="Invalid cache ttl"):
+        ConfigFile.model_validate({"matrix": [], "cache": {"ttl": ttl}})
+
+
+def test_ttl_parsed_into_timedelta():
+    config = ConfigFile.model_validate({"matrix": [], "cache": {"ttl": "1mo"}})
+    assert config.cache.ttl == timedelta(days=30)
+
+
+@pytest.mark.parametrize("ttl", [30, 1.5, None, ["1d"]])
+def test_non_string_ttl_rejected(ttl):
+    with pytest.raises(ValueError, match="must be a string"):
         ConfigFile.model_validate({"matrix": [], "cache": {"ttl": ttl}})
 
 
