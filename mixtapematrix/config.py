@@ -1,15 +1,17 @@
 import json
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import click
 import yaml
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
-    Field,
+    WithJsonSchema,
     computed_field,
     field_validator,
     model_validator,
@@ -22,6 +24,27 @@ CONFIG_FILENAME = "matrix.yaml"
 SCHEMA_FILENAME = "matrix.schema.json"
 
 _STRICT = ConfigDict(extra="forbid", use_attribute_docstrings=True)
+
+
+def _parse_ttl_input(value: Any) -> timedelta:
+    # Pydantic's own timedelta parsing accepts ISO 8601 and numeric seconds,
+    # which the TTL grammar forbids, so only strings reach parse_ttl.
+    if not isinstance(value, str):
+        # Pydantic only turns ValueError (not TypeError) into a validation error.
+        raise ValueError(  # noqa: TRY004
+            f"Invalid cache ttl {value!r}: must be a string such as 30m, 2d, or 1mo"
+        )
+    return parse_ttl(value)
+
+
+TimeToLive = Annotated[
+    timedelta,
+    BeforeValidator(_parse_ttl_input),
+    WithJsonSchema(
+        {"type": "string", "pattern": TTL_PATTERN, "examples": ["30m", "2d", "1w"]}
+    ),
+]
+"""A duration like 30m, 2d, or 1mo, parsed into a timedelta at validation time."""
 
 
 class Mp3Match(BaseModel):
@@ -169,17 +192,9 @@ class CacheConfig(BaseModel):
 
     model_config = _STRICT
 
-    ttl: str = Field(
-        json_schema_extra={"pattern": TTL_PATTERN, "examples": ["30m", "2d", "1w"]}
-    )
+    ttl: TimeToLive
     """How long the cache stays valid: a whole number plus m, h, d, w, or mo (30 days).
     The first run after it expires deletes the cache and rescans the library."""
-
-    @field_validator("ttl")
-    @classmethod
-    def validate_ttl(cls, ttl: str) -> str:
-        parse_ttl(ttl)
-        return ttl
 
 
 class ConfigFile(BaseModel):
