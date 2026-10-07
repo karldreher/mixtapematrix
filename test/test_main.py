@@ -523,3 +523,21 @@ def test_default_config_validates_but_fails_the_path_check():
     config = ConfigFile.model_validate(yaml.safe_load(ConfigFile.default_config_yaml()))
     with pytest.raises(click.ClickException, match="source_path"):
         config.check_paths()
+
+
+def test_run_prune_treats_differently_spelled_destinations_as_one(tmp_path):
+    config, out = prune_config(tmp_path)
+    data = yaml.safe_load(config.read_text())
+    second = tmp_path / "library2"
+    make_mp3(second / "other.mp3", artist="Beta")
+    data["matrix"].append(
+        {
+            "source_path": str(second),
+            "destination_path": f"{out}/",
+            "mp3_files": [{"artist": "Beta"}],
+        }
+    )
+    config.write_text(yaml.safe_dump(data))
+    result = CliRunner().invoke(cli, ["run", "--config", str(config), "--prune"])
+    assert result.exit_code == 0, result.output
+    assert sorted(p.name for p in out.iterdir()) == ["other.mp3", "song.mp3"]

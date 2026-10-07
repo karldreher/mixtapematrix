@@ -1,4 +1,5 @@
 import functools
+import os
 import subprocess
 from collections.abc import Iterator
 from functools import cached_property
@@ -128,7 +129,9 @@ class MixtapeMatrix:
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}
         for matrix_config, router in self._routers():
-            kept = keep.setdefault(matrix_config.destination_path, set())
+            # Normalized so "out" and "out/" are one destination, pruned once.
+            destination = os.path.normpath(matrix_config.destination_path)
+            kept = keep.setdefault(destination, set())
             # Listing first runs tag discovery (and its bar) to completion, and
             # gives the copy bar a total.
             files = list(router.source)
