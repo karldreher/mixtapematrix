@@ -409,6 +409,93 @@ def test_non_tail_wildcards_rejected(path):
         )
 
 
+def overlap_config(*matrices):
+    """A config dict from (source, destination) path pairs."""
+    return {
+        "matrix": [
+            {
+                "source_path": str(source),
+                "destination_path": str(destination),
+                "mp3_files": [{"artist": "x"}],
+            }
+            for source, destination in matrices
+        ]
+    }
+
+
+def test_destination_inside_source_rejected(tmp_path):
+    with pytest.raises(ValueError, match="overlaps") as error:
+        ConfigFile.model_validate(
+            overlap_config((tmp_path / "library", tmp_path / "library" / "copies"))
+        )
+    assert str(tmp_path / "library" / "copies") in str(error.value)
+    assert str(tmp_path / "library") in str(error.value)
+
+
+def test_source_inside_destination_rejected(tmp_path):
+    with pytest.raises(ValueError, match="overlaps"):
+        ConfigFile.model_validate(
+            overlap_config((tmp_path / "out" / "library", tmp_path / "out"))
+        )
+
+
+def test_identical_source_and_destination_rejected(tmp_path):
+    with pytest.raises(ValueError, match="overlaps"):
+        ConfigFile.model_validate(
+            overlap_config((tmp_path / "library", tmp_path / "library"))
+        )
+
+
+def test_overlap_through_symlink_or_dotdot_rejected(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(library)
+    with pytest.raises(ValueError, match="overlaps"):
+        ConfigFile.model_validate(overlap_config((library, link / "copies")))
+    with pytest.raises(ValueError, match="overlaps"):
+        ConfigFile.model_validate(
+            overlap_config((library, tmp_path / "elsewhere" / ".." / "library"))
+        )
+
+
+def test_overlap_between_matrices_rejected(tmp_path):
+    with pytest.raises(ValueError, match="overlaps"):
+        ConfigFile.model_validate(
+            overlap_config(
+                (tmp_path / "a", tmp_path / "out"),
+                (tmp_path / "b", tmp_path / "a" / "copies"),
+            )
+        )
+
+
+def test_sibling_directories_accepted(tmp_path):
+    config = ConfigFile.model_validate(
+        overlap_config(
+            (tmp_path / "library", tmp_path / "out"),
+            (tmp_path / "library2", tmp_path / "out2"),
+        )
+    )
+    assert len(config.matrix) == 2
+
+
+def test_default_config_still_validates():
+    ConfigFile.model_validate(yaml.safe_load(ConfigFile.default_config_yaml()))
+
+
+def test_overlapping_config_reports_one_line_without_traceback(tmp_path):
+    config = tmp_path / "matrix.yaml"
+    config.write_text(
+        yaml.safe_dump(overlap_config((tmp_path / "library", tmp_path / "library")))
+    )
+    for args in (["run"], ["list", "tag", "artist"], ["describe", "untagged"]):
+        result = CliRunner().invoke(cli, [*args, "--config", str(config)])
+        assert result.exit_code != 0
+        assert "overlaps" in result.output
+        assert isinstance(result.exception, SystemExit)
+        assert len(result.output.strip().splitlines()) == 1
+
+
 def path_config(tmp_path, source, destination):
     config = tmp_path / "matrix.yaml"
     config.write_text(
