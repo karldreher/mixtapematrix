@@ -133,17 +133,13 @@ def test_unusable_cache_is_refilled_for_next_time(tmp_path, config):
 
 
 def test_no_cache_reads_every_file_and_leaves_the_cache_alone(
-    tmp_path, config, monkeypatch
+    tmp_path, config, read_counter
 ):
     artists(config)
     before = cache_files(tmp_path)
-    calls = []
-    real = mp3_router.read_tags
-    monkeypatch.setattr(
-        mp3_router, "read_tags", lambda p: (calls.append(p), real(p))[1]
-    )
+    read_counter.clear()
     assert artists(config, "--no-cache") == ["Alpha", "Beta", "Delta", "Gamma"]
-    assert len(calls) == 4
+    assert len(read_counter) == 4
     assert cache_files(tmp_path) == before
 
 

@@ -1,18 +1,16 @@
 import logging
 import os
-from collections.abc import Generator, Iterator
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 
 import click
 from eyed3.id3 import Genre, Tag
 
-from ..cache import TAG_FIELDS, Entry, TagCache, TagField, Tags, tag_index
+from ..cache import TAG_FIELDS, TAG_INDEX, Entry, TagCache, TagField, Tags
 from ..config import MatrixConfig, Mp3Match
 from ..progress import ProgressFactory, no_progress
 from .files import (
-    File,
-    FileRouter,
     glob_prefix,
     is_glob,
     make_exclusion_test,
@@ -95,7 +93,7 @@ def read_tags(path: str) -> Tags | None:
 
 def _tag_matches(tags: Tags, key: TagField, value: str) -> bool:
     """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
-    tag_value = tags[tag_index(key)]
+    tag_value = tags[TAG_INDEX[key]]
     return tag_value is not None and tag_value.lower() == value.lower()
 
 
@@ -114,7 +112,7 @@ def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:
     return entry.exclude is None or not _entry_matches(tags, path, entry.exclude)
 
 
-class TagRouter(FileRouter):
+class TagRouter:
     def __init__(
         self,
         matrix_config: MatrixConfig,
@@ -130,7 +128,7 @@ class TagRouter(FileRouter):
         Tags for every MP3, keyed by path relative to the source. Files whose mtime
         matches the cache are not re-read. The cache is rewritten when anything changed.
         """
-        root = self.matrix_config.source.path
+        root = self.matrix_config.source_path
         cached = self.cache.load() if self.cache else {}
         found: dict[str, Entry] = {}
         misses: list[tuple[str, str, int]] = []
@@ -160,12 +158,11 @@ class TagRouter(FileRouter):
         return found
 
     def _check_source(self) -> None:
-        if self.matrix_config.source.is_file:
+        if os.path.isfile(self.matrix_config.source_path):
             raise ValueError(
-                f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
+                f"{self.matrix_config.source_path} is not a directory. TagRouter only works on directories, not individual files."
             )
-        _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
-        root = os.path.abspath(self.matrix_config.source.path)
+        root = os.path.abspath(self.matrix_config.source_path)
         for entry in self.matrix_config.mp3_files:
             for folder in entry.folders():
                 # Like exclude_paths, glob entries need not exist; plain ones must.
@@ -185,7 +182,7 @@ class TagRouter(FileRouter):
         return [
             p
             for p in search_files(
-                self.matrix_config.source.path, self.matrix_config.exclude_paths
+                self.matrix_config.source_path, self.matrix_config.exclude_paths
             )
             if p.lower().endswith(".mp3")
         ]
@@ -207,7 +204,7 @@ class TagRouter(FileRouter):
         return self._from_cache(cached)
 
     def _from_cache(self, cached: dict[str, Entry]) -> Iterator[tuple[str, Tags]]:
-        root = os.path.abspath(self.matrix_config.source.path)  # so paths join absolute
+        root = os.path.abspath(self.matrix_config.source_path)  # so paths join absolute
         is_excluded = make_exclusion_test(self.matrix_config.exclude_paths)
         dirs: dict[str, bool] = {"": False}  # relative dir -> excluded, by memo
 
@@ -238,7 +235,7 @@ class TagRouter(FileRouter):
         if not refresh and (cached := self.cached_entries()) is not None:
             yield from cached
             return
-        root = self.matrix_config.source.path
+        root = self.matrix_config.source_path
         for path, (_, tags) in self._discover_tags(self._mp3_paths()).items():
             if tags is not None:
                 yield os.path.abspath(os.path.join(root, path)), tags
@@ -255,7 +252,7 @@ class TagRouter(FileRouter):
         pass reads only the files that can be untagged, so it is not a complete
         discovery and must not be saved as one.
         """
-        root = self.matrix_config.source.path
+        root = self.matrix_config.source_path
         cached = self.cache.load() if self.cache else {}
         unknown: list[str] = []
         for path in self._mp3_paths():
@@ -279,13 +276,13 @@ class TagRouter(FileRouter):
         return found
 
     @property
-    def source(self) -> Generator[File]:
+    def source(self) -> Iterator[str]:
         """
         A property that returns a generator of files that match the tag criteria.
         This uses the matrix_config to determine the tag and value to search for.
         No arguments are needed, as the matrix_config is already set in the constructor.
         """
-        source_path = self.matrix_config.source.path
+        source_path = self.matrix_config.source_path
         root = os.path.abspath(source_path)
         found = self._discover_tags(self._mp3_paths())
         for rel, (_, tags) in found.items():
@@ -296,4 +293,4 @@ class TagRouter(FileRouter):
                 _entry_matches(tags, absolute, entry)
                 for entry in self.matrix_config.mp3_files
             ):
-                yield File(path=os.path.join(source_path, rel))
+                yield os.path.join(source_path, rel)

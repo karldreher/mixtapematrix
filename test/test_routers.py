@@ -3,34 +3,11 @@ import os
 import struct
 
 import pytest
+from helpers import make_mp3
 
-from mixtapematrix.routers.files import File
 from mixtapematrix.routers.mp3_router import configure_tag_logging
 
-
-def test_file(mkdirs):
-    file = File(path="test/source")
-    assert file.is_dir
-    assert not file.is_file
-
-
-def test_invalid_file():
-    with pytest.raises(ValueError):
-        File(path="test/source/invalid")
-
-
 # TODO: test TagRouter, need fixture for some mp3 files
-
-
-def make_mp3(path, **tags):
-    from eyed3.id3 import Tag
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch()
-    tag = Tag()
-    for key, value in tags.items():
-        setattr(tag, key, value)
-    tag.save(str(path))
 
 
 @pytest.fixture
@@ -63,22 +40,7 @@ def make_router(tmp_path, library, mp3_files, cache=True, exclude_paths=()):
 
 
 def matched(router):
-    return sorted(os.path.basename(f.path) for f in router.source)
-
-
-@pytest.fixture
-def read_counter(monkeypatch):
-    from mixtapematrix.routers import mp3_router
-
-    calls = []
-    real = mp3_router.read_tags
-
-    def counting(path):
-        calls.append(path)
-        return real(path)
-
-    monkeypatch.setattr(mp3_router, "read_tags", counting)
-    return calls
+    return sorted(os.path.basename(f) for f in router.source)
 
 
 def test_router_matches_without_cache(tmp_path, library, read_counter):
@@ -445,14 +407,6 @@ def test_folder_must_be_absolute():
         Mp3Match(folder="a")
 
 
-def test_exclude_needs_a_key_to_match_but_folder_counts():
-    from mixtapematrix.config import Mp3Match
-
-    with pytest.raises(ValueError, match="at least one"):
-        Mp3Match(exclude={"folder": "/music/a"})
-    Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
-
-
 @pytest.mark.parametrize("where", ["missing", "outside", "outside_glob"])
 def test_bad_folders_fail_before_copying(tmp_path, folders, where):
     outside = tmp_path / "elsewhere"
@@ -538,3 +492,20 @@ def test_path_fields_use_the_shared_pattern_type():
 
     assert MatrixConfig.model_fields["exclude_paths"].annotation == list[PathPattern]
     assert Mp3Match.model_fields["folder"].annotation == PathPattern | None
+
+
+def test_copy_file_maps_the_relative_path_and_never_overwrites(tmp_path):
+    from mixtapematrix.routers.files import copy_file
+
+    # The source root appears twice in the path: only the leading one is replaced.
+    root = tmp_path / "a" / "a"
+    song = root / "a" / "song.mp3"
+    song.parent.mkdir(parents=True)
+    song.write_bytes(b"new")
+    destination = tmp_path / "out"
+    target = copy_file(str(song), str(root), str(destination))
+    assert target == str(destination / "a" / "song.mp3")
+    assert (destination / "a" / "song.mp3").read_bytes() == b"new"
+    (destination / "a" / "song.mp3").write_bytes(b"kept")
+    assert copy_file(str(song), str(root), f"{destination}/") == target
+    assert (destination / "a" / "song.mp3").read_bytes() == b"kept"

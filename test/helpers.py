@@ -14,13 +14,14 @@ def make_mp3(path, **tags):
         tag.save(str(path))
 
 
-def write_config(tmp_path, sources, cache=True, exclude_paths=None):
+def write_config(tmp_path, sources, cache=True, exclude_paths=None, mp3_files=None):
     data = {
         "matrix": [
             {
                 "source_path": str(source),
                 "destination_path": str(tmp_path / f"out{i}"),
-                "mp3_files": [{"artist": "nobody"}],  # list ignores matrix filters
+                # the default matches nothing: list and describe ignore matrix filters
+                "mp3_files": mp3_files or [{"artist": "nobody"}],
                 **(
                     {"exclude_paths": [str(p) for p in exclude_paths]}
                     if exclude_paths

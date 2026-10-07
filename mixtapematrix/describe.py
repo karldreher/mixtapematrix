@@ -17,7 +17,7 @@ the order the filesystem lists files in.
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
-from .cache import TagField, Tags, tag_index
+from .cache import TAG_INDEX, TagField, Tags
 
 # The levels songs can be nested under, outermost first.
 LEVELS: tuple[TagField, ...] = ("artist", "album")
@@ -53,7 +53,7 @@ def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[TagField, ...]) -
     A tree of `levels` (outermost first) with songs at the bottom. A level with no
     value and no UNKNOWN placeholder leaves the row out.
     """
-    steps = [(tag_index(level), UNKNOWN.get(level)) for level in levels]
+    steps = [(TAG_INDEX[level], UNKNOWN.get(level)) for level in levels]
     root = Node()
     for path, tags in rows:
         node = root

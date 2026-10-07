@@ -1,69 +1,27 @@
 import os
 import shutil
 import sys
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable
 from functools import cache
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, computed_field, field_validator
+from pydantic import AfterValidator
 
 
-class File(BaseModel):
-    path: str
-    __hash__ = object.__hash__
-
-    @computed_field
-    @property
-    def is_dir(self) -> bool:
-        return os.path.isdir(self.path)
-
-    @computed_field
-    @property
-    def is_file(self) -> bool:
-        return os.path.isfile(self.path)
-
-    @field_validator("path", mode="after")
-    @classmethod
-    def validate_path(cls, path):
-        if not os.path.exists(path):
-            raise ValueError(f"File {path} does not exist")
-
-        return path
-
-
-class FileRouter(ABC):
-    @property
-    @abstractmethod
-    def source(self) -> Generator[File]:
-        raise NotImplementedError
-
-    @staticmethod
-    def deeply_copy(source: File, root_source: File, destination: File) -> str:
-        """Copy source into destination, returning the path it was copied to."""
-        destination_file = destination_path(source, root_source, destination)
-        try:
-            if os.path.exists(destination_file):
-                # Do nothing, we already copied this file
-                # logging.debug(f"File {destination_file} already exists, skipping")
-                pass
-            else:
-                new_dir = os.path.dirname(destination_file)
-                if not os.path.exists(new_dir):
-                    os.makedirs(new_dir)
-                if source.is_dir:
-                    shutil.copytree(source.path, destination_file)
-                elif source.is_file:
-                    shutil.copyfile(source.path, destination_file)
-        except OSError as e:
-            print(f"Error copying {source.path} to {destination_file}: {e}")
-            sys.exit(1)
-        return destination_file
-
-
-def destination_path(source: File, root_source: File, destination: File) -> str:
-    """Where deeply_copy places a source file inside the destination."""
-    return source.path.replace(root_source.path, destination.path)
+def copy_file(source: str, root: str, destination: str) -> str:
+    """
+    Copy `source`, a file beneath `root`, to the same relative path beneath
+    `destination` unless it is already there. Returns the path it belongs at.
+    """
+    target = os.path.join(destination, os.path.relpath(source, root))
+    try:
+        if not os.path.exists(target):
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            shutil.copyfile(source, target)
+    except OSError as e:
+        print(f"Error copying {source} to {target}: {e}")
+        sys.exit(1)
+    return target
 
 
 def paths_overlap(a: str, b: str) -> bool:

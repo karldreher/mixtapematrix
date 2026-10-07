@@ -2,10 +2,10 @@ import io
 import sys
 from contextlib import contextmanager
 
+import helpers
 import pytest
-import yaml
 from click.testing import CliRunner
-from eyed3.id3 import Tag
+from helpers import make_mp3
 
 from mixtapematrix import main
 from mixtapematrix.main import cli
@@ -17,33 +17,13 @@ class FakeTty(io.StringIO):
         return True
 
 
-def make_library(root, names):
-    """MP3s tagged artist=Alpha, one per name."""
-    root.mkdir(parents=True)
-    for name in names:
-        (root / name).touch()
-        tag = Tag()
-        tag.artist = "Alpha"
-        tag.save(str(root / name))
-
-
 def write_config(tmp_path, names=("a.mp3", "b.mp3", "c.mp3"), cache=False):
-    make_library(tmp_path / "library", names)
-    (tmp_path / "out").mkdir()
-    data = {
-        "matrix": [
-            {
-                "source_path": str(tmp_path / "library"),
-                "destination_path": str(tmp_path / "out"),
-                "mp3_files": [{"artist": "Alpha"}],
-            }
-        ]
-    }
-    if cache:
-        data["cache"] = {"ttl": "1d"}
-    config = tmp_path / "matrix.yaml"
-    config.write_text(yaml.safe_dump(data))
-    return config
+    library = tmp_path / "library"
+    for name in names:
+        make_mp3(library / name, artist="Alpha")
+    return helpers.write_config(
+        tmp_path, [library], cache=cache, mp3_files=[{"artist": "Alpha"}]
+    )
 
 
 def recording_factory(calls):

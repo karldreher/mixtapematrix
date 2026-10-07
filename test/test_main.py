@@ -1,44 +1,57 @@
 import json
-import os
 from datetime import timedelta
 
 import click
 import pytest
 import yaml
 from click.testing import CliRunner
+from helpers import cache_files, make_mp3, write_config
 from jsonschema import Draft202012Validator
 
-from mixtapematrix.config import ConfigFile
+from mixtapematrix.config import ConfigFile, Mp3Match
 from mixtapematrix.main import MixtapeMatrix, cli
 
 
-def test_config(mkdirs):
-    matrix = MixtapeMatrix("test/matrix.yaml")
-    # This actually gets pretty far, because the ConfigFile model is highly validated.
-    assert matrix.config_data
-    assert matrix.config_data.matrix[0].source.path == "test/source"
-    assert matrix.config_data.matrix[0].destination.path == "test/output"
+def transform_config(tmp_path, *commands):
+    source, destination = tmp_path / "source", tmp_path / "output"
+    (source / "exclude").mkdir(parents=True)
+    destination.mkdir()
+    config = tmp_path / "matrix.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "matrix": [
+                    {
+                        "source_path": str(source),
+                        "exclude_paths": [str(source / "exclude")],
+                        "destination_path": str(destination),
+                        "mp3_files": [{"genre": "funk"}, {"artist": "Fear Factory"}],
+                    }
+                ],
+                "transform": {"commands": list(commands)},
+            }
+        )
+    )
+    return config
+
+
+def test_config(tmp_path):
+    config = MixtapeMatrix(str(transform_config(tmp_path, "true"))).config_data
+    assert config.matrix[0].source_path == str(tmp_path / "source")
+    assert config.matrix[0].destination_path == str(tmp_path / "output")
+    assert config.transform.commands == ["true"]
 
 
 def test_invalid_config():
     with pytest.raises(ValueError):
-        _ = MixtapeMatrix("test/invalid.yaml").config_data
-    with pytest.raises(ValueError), open("test/invalid.yaml") as f:
-        # same as above, but more directly catching the error we expect
-        ConfigFile.model_validate(yaml.safe_load(f))
-
-
-def test_valid_transform(mkdirs):
-    matrix = MixtapeMatrix("test/matrix.yaml")
-    assert matrix.config_data.transform.commands == ['echo "Files copied successfully"']
+        ConfigFile.model_validate({"rotten": ["anything"]})
 
 
 def test_dangerous_transform():
-    with pytest.raises(ValueError):
-        _ = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
-    with pytest.raises(ValueError), open("test/dangerous_matrix.yaml") as f:
-        # same as above, but more directly catching the error we expect
-        ConfigFile.model_validate(yaml.safe_load(f))
+    with pytest.raises(ValueError, match="dangerous"):
+        ConfigFile.model_validate(
+            {"matrix": [], "transform": {"commands": ["rm -rf /"]}}
+        )
 
 
 def test_cli():
@@ -73,9 +86,12 @@ def test_list_tag_missing_config_fails_cleanly():
     assert not isinstance(result.exception, FileNotFoundError)
 
 
-def test_run_with_config(mkdirs):
-    result = CliRunner().invoke(cli, ["run", "--config", "test/matrix.yaml"])
+def test_run_executes_transform_commands(tmp_path):
+    marker = tmp_path / "ran"
+    config = transform_config(tmp_path, f"touch {marker}")
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
     assert result.exit_code == 0, result.output
+    assert marker.exists()
 
 
 def test_init_creates_config_once(tmp_path, monkeypatch):
@@ -105,12 +121,10 @@ def test_default_template_validates(tmp_path, monkeypatch):
     assert ConfigFile.model_validate(data).matrix[0].mp3_files
 
 
-def test_schema_excludes_computed_fields_and_forbids_extras():
+def test_schema_forbids_extras_and_describes_every_property():
     schema = ConfigFile.json_schema()
     matrix = schema["$defs"]["MatrixConfig"]
-    assert not {"source", "destination", "excluded_files"} & set(matrix["properties"])
     assert all(d["additionalProperties"] is False for d in schema["$defs"].values())
-    assert "File" not in schema["$defs"]
     assert all("description" in p for p in matrix["properties"].values())
 
 
@@ -156,38 +170,10 @@ def test_default_config_yaml_validates_against_schema(json_schema):
     ConfigFile.model_validate(data)
 
 
-def write_cache_config(tmp_path, ttl="1d"):
-    from eyed3.id3 import Tag
-
+def write_cache_config(tmp_path):
     source = tmp_path / "library"
-    source.mkdir()
-    (tmp_path / "out").mkdir()
-    song = source / "song.mp3"
-    song.touch()
-    tag = Tag()
-    tag.artist = "Alpha"
-    tag.save(str(song))
-    config = tmp_path / "matrix.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "matrix": [
-                    {
-                        "source_path": str(source),
-                        "destination_path": str(tmp_path / "out"),
-                        "mp3_files": [{"artist": "Alpha"}],
-                    }
-                ],
-                "cache": {"ttl": ttl},
-            }
-        )
-    )
-    return config
-
-
-def cache_files(tmp_path):
-    directory = tmp_path / "xdg-cache" / "mixtapematrix"
-    return sorted(directory.glob("*.mmcache")) if directory.exists() else []
+    make_mp3(source / "song.mp3", artist="Alpha")
+    return write_config(tmp_path, [source], mp3_files=[{"artist": "Alpha"}])
 
 
 def test_cache_block_accepted_and_in_schema():
@@ -243,14 +229,14 @@ def test_run_without_cache_block_writes_nothing(tmp_path):
     del data["cache"]
     config.write_text(yaml.safe_dump(data))
     assert CliRunner().invoke(cli, ["run", "--config", str(config)]).exit_code == 0
-    assert cache_files(tmp_path) == []
+    assert not cache_files(tmp_path)
 
 
 def test_run_no_cache_flag_bypasses_cache(tmp_path):
     config = write_cache_config(tmp_path)
     args = ["run", "--config", str(config), "--no-cache"]
     assert CliRunner().invoke(cli, args).exit_code == 0
-    assert cache_files(tmp_path) == []
+    assert not cache_files(tmp_path)
 
 
 def test_cache_clean_command(tmp_path):
@@ -264,7 +250,7 @@ def test_cache_clean_command(tmp_path):
     result = runner.invoke(cli, ["cache", "clean", "--all"])
     assert result.exit_code == 0
     assert "Removed 1 cache file(s)" in result.output
-    assert cache_files(tmp_path) == []
+    assert not cache_files(tmp_path)
 
 
 def test_cache_clean_with_no_cache_directory(tmp_path):
@@ -273,10 +259,10 @@ def test_cache_clean_with_no_cache_directory(tmp_path):
     assert "Removed 0 cache file(s)" in result.output
 
 
-def prune_config(tmp_path, destinations=None):
+def prune_config(tmp_path):
     """write_cache_config plus stale files in the destination."""
     config = write_cache_config(tmp_path)
-    out = tmp_path / "out"
+    out = tmp_path / "out0"
     (out / "old").mkdir()
     (out / "old" / "gone.mp3").touch()
     (out / "notes.txt").touch()
@@ -304,12 +290,7 @@ def test_run_prune_shared_destination_keeps_all_matrix_output(tmp_path):
     data = yaml.safe_load(config.read_text())
     second = tmp_path / "library2"
     second.mkdir()
-    from eyed3.id3 import Tag
-
-    (second / "other.mp3").touch()
-    tag = Tag()
-    tag.artist = "Beta"
-    tag.save(str(second / "other.mp3"))
+    make_mp3(second / "other.mp3", artist="Beta")
     data["matrix"].append(
         {
             "source_path": str(second),
@@ -347,8 +328,8 @@ def test_run_refuses_destination_inside_source_without_prune(tmp_path):
     assert list(nested.iterdir()) == []
 
 
-def test_legacy_exclude_path_rejected_with_migration_message():
-    with pytest.raises(ValueError, match="exclude_paths") as error:
+def test_legacy_exclude_path_is_rejected_as_an_unknown_key():
+    with pytest.raises(ValueError, match="exclude_path"):
         ConfigFile.model_validate(
             {
                 "matrix": [
@@ -361,29 +342,36 @@ def test_legacy_exclude_path_rejected_with_migration_message():
                 ]
             }
         )
-    assert "- a/skip" in str(error.value)
 
 
 def test_exclude_only_entry_rejected():
-    from mixtapematrix.config import Mp3Match
-
     with pytest.raises(ValueError, match="at least one tag"):
         Mp3Match(exclude={"album": "X"})
     with pytest.raises(ValueError, match="at least one tag"):
         Mp3Match(artist="A", exclude={"exclude": {"album": "X"}})
+    with pytest.raises(ValueError, match="at least one"):
+        Mp3Match(exclude={"folder": "/music/a"})
+    Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
 
 
-def test_missing_exclude_path_fails_when_files_are_built(mkdirs):
-    from mixtapematrix.config import MatrixConfig
-
-    matrix = MatrixConfig(
-        source_path="test/source",
-        exclude_paths=["test/source/missing"],
-        destination_path="test/output",
-        mp3_files=[{"artist": "x"}],
+def test_missing_exclude_path_is_a_one_line_error(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    missing = tmp_path / "missing"
+    config = write_config(tmp_path, [library], exclude_paths=[missing])
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
+    assert result.exit_code != 0
+    assert result.output.strip() == (
+        f"Error: matrix[0].exclude_paths: {missing} does not exist"
     )
-    with pytest.raises(ValueError, match="does not exist"):
-        _ = matrix.excluded_files
+
+
+def test_missing_glob_exclude_path_is_accepted(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    config = write_config(tmp_path, [library], exclude_paths=[f"{library}/nope/**"])
+    result = CliRunner().invoke(cli, ["list", "tag", "artist", "--config", str(config)])
+    assert result.exit_code == 0, result.output
 
 
 def test_schema_describes_exclude_options():
@@ -394,19 +382,6 @@ def test_schema_describes_exclude_options():
     match = schema["$defs"]["Mp3Match"]["properties"]
     assert "description" in match["exclude"]
     assert "Mp3Match" in str(match["exclude"])
-
-
-@pytest.mark.parametrize("path", ["/m/*/rock", "/m/ro?k", "/m/[rp]ock", "/m/*.mp3"])
-def test_non_tail_wildcards_rejected(path):
-    from mixtapematrix.config import MatrixConfig
-
-    with pytest.raises(ValueError, match="trailing '\\*\\*'"):
-        MatrixConfig(
-            source_path="a",
-            exclude_paths=[path],
-            destination_path="b",
-            mp3_files=[{"artist": "x"}],
-        )
 
 
 def overlap_config(*matrices):
@@ -423,40 +398,30 @@ def overlap_config(*matrices):
     }
 
 
-def test_destination_inside_source_rejected(tmp_path):
-    with pytest.raises(ValueError, match="overlaps") as error:
-        ConfigFile.model_validate(
-            overlap_config((tmp_path / "library", tmp_path / "library" / "copies"))
-        )
-    assert str(tmp_path / "library" / "copies") in str(error.value)
-    assert str(tmp_path / "library") in str(error.value)
-
-
-def test_source_inside_destination_rejected(tmp_path):
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(
-            overlap_config((tmp_path / "out" / "library", tmp_path / "out"))
-        )
-
-
-def test_identical_source_and_destination_rejected(tmp_path):
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(
-            overlap_config((tmp_path / "library", tmp_path / "library"))
-        )
-
-
-def test_overlap_through_symlink_or_dotdot_rejected(tmp_path):
+@pytest.mark.parametrize(
+    "layout",
+    [
+        "inside",  # destination inside source
+        "contains",  # source inside destination
+        "same",
+        "symlink",
+        "dotdot",
+    ],
+)
+def test_overlapping_source_and_destination_rejected(tmp_path, layout):
     library = tmp_path / "library"
     library.mkdir()
-    link = tmp_path / "link"
-    link.symlink_to(library)
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(overlap_config((library, link / "copies")))
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(
-            overlap_config((library, tmp_path / "elsewhere" / ".." / "library"))
-        )
+    (tmp_path / "link").symlink_to(library)
+    destination = {
+        "inside": library / "copies",
+        "contains": tmp_path,
+        "same": library,
+        "symlink": tmp_path / "link" / "copies",
+        "dotdot": tmp_path / "elsewhere" / ".." / "library",
+    }[layout]
+    with pytest.raises(ValueError, match="overlaps") as error:
+        ConfigFile.model_validate(overlap_config((library, destination)))
+    assert str(library) in str(error.value)
 
 
 def test_overlap_between_matrices_rejected(tmp_path):
@@ -479,10 +444,6 @@ def test_sibling_directories_accepted(tmp_path):
     assert len(config.matrix) == 2
 
 
-def test_default_config_still_validates():
-    ConfigFile.model_validate(yaml.safe_load(ConfigFile.default_config_yaml()))
-
-
 def test_overlapping_config_reports_one_line_without_traceback(tmp_path):
     config = tmp_path / "matrix.yaml"
     config.write_text(
@@ -498,19 +459,7 @@ def test_overlapping_config_reports_one_line_without_traceback(tmp_path):
 
 def path_config(tmp_path, source, destination):
     config = tmp_path / "matrix.yaml"
-    config.write_text(
-        yaml.safe_dump(
-            {
-                "matrix": [
-                    {
-                        "source_path": str(source),
-                        "destination_path": str(destination),
-                        "mp3_files": [{"artist": "Alpha"}],
-                    }
-                ]
-            }
-        )
-    )
+    config.write_text(yaml.safe_dump(overlap_config((source, destination))))
     return config
 
 
@@ -575,27 +524,19 @@ def test_default_config_validates_but_fails_the_path_check():
         config.check_paths()
 
 
-def test_source_and_destination_do_not_touch_the_filesystem(tmp_path, monkeypatch):
-    from mixtapematrix.config import MatrixConfig
-
-    calls = []
-    real_exists, real_isdir = os.path.exists, os.path.isdir
-    monkeypatch.setattr(os.path, "exists", lambda p: calls.append(p) or real_exists(p))
-    monkeypatch.setattr(os.path, "isdir", lambda p: calls.append(p) or real_isdir(p))
-    matrix = MatrixConfig(
-        source_path="/no/such/source",
-        destination_path="/no/such/destination",
-        mp3_files=[{"artist": "x"}],
+def test_run_prune_treats_differently_spelled_destinations_as_one(tmp_path):
+    config, out = prune_config(tmp_path)
+    data = yaml.safe_load(config.read_text())
+    second = tmp_path / "library2"
+    make_mp3(second / "other.mp3", artist="Beta")
+    data["matrix"].append(
+        {
+            "source_path": str(second),
+            "destination_path": f"{out}/",
+            "mp3_files": [{"artist": "Beta"}],
+        }
     )
-    for _ in range(3):
-        assert matrix.source.path == "/no/such/source"
-        assert matrix.destination.path == "/no/such/destination"
-    assert calls == []
-    assert matrix.source is matrix.source
-
-
-def test_no_path_is_special_cased_by_prefix(tmp_path):
-    from mixtapematrix.routers.files import File
-
-    with pytest.raises(ValueError, match="does not exist"):
-        File(path="/example/anything")
+    config.write_text(yaml.safe_dump(data))
+    result = CliRunner().invoke(cli, ["run", "--config", str(config), "--prune"])
+    assert result.exit_code == 0, result.output
+    assert sorted(p.name for p in out.iterdir()) == ["other.mp3", "song.mp3"]

@@ -15,7 +15,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import Literal, get_args
@@ -33,14 +33,8 @@ TagField = Literal["artist", "album", "genre", "album_artist"]
 TAG_FIELDS: tuple[TagField, ...] = get_args(TagField)
 
 
-def tag_index(field: str) -> int:
-    """The position of a tag field in Tags; unknown names raise a ValueError naming them."""
-    try:
-        return TAG_FIELDS.index(field)
-    except ValueError:
-        raise ValueError(
-            f"Unknown tag field {field!r}; expected one of {', '.join(TAG_FIELDS)}"
-        ) from None
+TAG_INDEX: dict[TagField, int] = {field: i for i, field in enumerate(TAG_FIELDS)}
+"""The position of each tag field in Tags."""
 
 
 CACHE_SUFFIX = ".mmcache"
@@ -123,14 +117,8 @@ class CacheHeader:
 
 def _read_header(f) -> CacheHeader:
     (length,) = _HEADER_LEN.unpack(f.read(_HEADER_LEN.size))
-    raw = ormsgpack.unpackb(f.read(length))
-    return CacheHeader(
-        version=raw["version"],
-        created_at=raw["created_at"],
-        ttl_seconds=raw["ttl_seconds"],
-        config_path=raw["config_path"],
-        source_root=raw["source_root"],
-    )
+    # A header with missing or extra keys raises TypeError, which callers treat as unreadable.
+    return CacheHeader(**ormsgpack.unpackb(f.read(length)))
 
 
 def _encode(entries: dict[str, Entry]) -> bytes:
@@ -239,13 +227,15 @@ class TagCache:
         """Write the cache atomically. Failing to write is reported, not fatal."""
         # Rewrites keep the original created_at so the cache still expires on schedule.
         header = ormsgpack.packb(
-            {
-                "version": CACHE_SCHEMA_VERSION,
-                "created_at": self._created_at or int(self.now()),
-                "ttl_seconds": int(self.ttl.total_seconds()),
-                "config_path": str(self.config_path),
-                "source_root": str(self.source_root),
-            }
+            asdict(
+                CacheHeader(
+                    version=CACHE_SCHEMA_VERSION,
+                    created_at=self._created_at or int(self.now()),
+                    ttl_seconds=int(self.ttl.total_seconds()),
+                    config_path=str(self.config_path),
+                    source_root=str(self.source_root),
+                )
+            )
         )
         payload = _HEADER_LEN.pack(len(header)) + header + _encode(entries)
         tmp = None

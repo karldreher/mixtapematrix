@@ -1,3 +1,5 @@
+import functools
+import os
 import subprocess
 from collections.abc import Iterator
 from functools import cached_property
@@ -6,12 +8,12 @@ import click
 import yaml
 from pydantic import ValidationError
 
-from .cache import TAG_FIELDS, TagCache, TagField, Tags, clean_cache, tag_index
+from .cache import TAG_FIELDS, TAG_INDEX, TagCache, TagField, Tags, clean_cache
 from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
-from .routers.files import prune_destination
+from .routers.files import copy_file, prune_destination
 from .routers.mp3_router import TagRouter, _tag_matches, configure_tag_logging
 
 
@@ -55,18 +57,24 @@ class MixtapeMatrix:
         config.check_paths()
         return config
 
-    def tag_cache(self, matrix_config: MatrixConfig) -> TagCache | None:
-        """The tag cache for a matrix, or None when caching is off for this run."""
+    def _routers(self) -> Iterator[tuple[MatrixConfig, TagRouter]]:
+        """A router per matrix, with the tag cache on unless this run turns it off."""
+        configure_tag_logging(self.verbose)
         cache_config = self.config_data.cache
-        if not (self.use_cache and cache_config):
-            return None
-        return TagCache(
-            self.config,
-            matrix_config.source.path,
-            cache_config.ttl,
-            log=self.logger,
-            debug=self.debug,
-        )
+        for matrix_config in self.config_data.matrix:
+            cache = None
+            if self.use_cache and cache_config:
+                cache = TagCache(
+                    self.config,
+                    matrix_config.source_path,
+                    cache_config.ttl,
+                    log=self.logger,
+                    debug=self.debug,
+                )
+            yield (
+                matrix_config,
+                TagRouter(matrix_config, cache=cache, progress=self.progress),
+            )
 
     def _entries(self, where: list[tuple[TagField, str]]) -> Iterator[tuple[str, Tags]]:
         """
@@ -74,15 +82,7 @@ class MixtapeMatrix:
         mp3_files filters. `where` pairs tag names with values; only files matching
         every pair (case-insensitive) are yielded.
         """
-        for key, _ in where:
-            tag_index(key)
-        configure_tag_logging(self.verbose)
-        for matrix_config in self.config_data.matrix:
-            router = TagRouter(
-                matrix_config,
-                cache=self.tag_cache(matrix_config),
-                progress=self.progress,
-            )
+        for _, router in self._routers():
             for path, tags in router.entries(refresh=self.refresh):
                 if all(_tag_matches(tags, k, v) for k, v in where):
                     yield path, tags
@@ -94,7 +94,7 @@ class MixtapeMatrix:
         Distinct values of a tag across every matrix source, sorted. `where` maps
         tag names to values; only files matching every one (case-insensitive) count.
         """
-        index = tag_index(field)
+        index = TAG_INDEX[field]
         spellings: dict[str, set[str]] = {}  # casefolded -> every spelling seen
         for _, tags in self._entries(list((where or {}).items())):
             if value := tags[index]:
@@ -119,38 +119,31 @@ class MixtapeMatrix:
 
     def describe_untagged(self) -> list[str]:
         """Every MP3 with no readable ID3 tag across the matrix sources, sorted."""
-        configure_tag_logging(self.verbose)
         found: set[str] = set()
-        for matrix_config in self.config_data.matrix:
-            router = TagRouter(
-                matrix_config,
-                cache=self.tag_cache(matrix_config),
-                progress=self.progress,
-            )
+        for _, router in self._routers():
             found.update(router.untagged())
         return sorted(found, key=str.casefold)
 
     def run(self):
-        configure_tag_logging(self.verbose)
         # Destinations can be shared between matrices, so pruning waits until
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}
-        for matrix_config in self.config_data.matrix:
-            router = TagRouter(
-                matrix_config,
-                cache=self.tag_cache(matrix_config),
-                progress=self.progress,
-            )
-            kept = keep.setdefault(matrix_config.destination.path, set())
+        for matrix_config, router in self._routers():
+            # Normalized so "out" and "out/" are one destination, pruned once.
+            destination = os.path.normpath(matrix_config.destination_path)
+            kept = keep.setdefault(destination, set())
             # Listing first runs tag discovery (and its bar) to completion, and
             # gives the copy bar a total.
             files = list(router.source)
-            source, destination = matrix_config.source, matrix_config.destination
-            label = f"Copying files from {source.path}"
+            source, destination = (
+                matrix_config.source_path,
+                matrix_config.destination_path,
+            )
+            label = f"Copying files from {source}"
             with self.progress(label, len(files)) as bar:
                 for file in files:
-                    self.debug(f"Copying {file.path} to {destination.path}")
-                    kept.add(TagRouter.deeply_copy(file, source, destination))
+                    self.debug(f"Copying {file} to {destination}")
+                    kept.add(copy_file(file, source, destination))
                     bar.update(1)
         if self.prune:
             for root, kept in keep.items():
@@ -194,29 +187,67 @@ def cli(ctx):
         click.echo(f"Warning: {e} Continuing anyway.", err=True)
 
 
+def _library_options(refresh: bool = False):
+    """
+    The options every command that reads the library shares, plus --refresh when
+    asked. The command receives a MixtapeMatrix built from them as `matrix`.
+    """
+
+    def decorate(func):
+        @functools.wraps(func)
+        def command(*, config, debug, verbose, no_cache, refresh=False, **kwargs):
+            prune = kwargs.pop("prune", False)
+            matrix = MixtapeMatrix(
+                config=config,
+                debug=debug,
+                verbose=verbose,
+                use_cache=not no_cache,
+                prune=prune,
+                refresh=refresh,
+            )
+            return func(matrix=matrix, **kwargs)
+
+        options = [
+            click.option(
+                "--config", default="matrix.yaml", help="The YAML configuration file"
+            ),
+            click.option("--debug", help="Enable debug logging", is_flag=True),
+            click.option(
+                "--verbose",
+                is_flag=True,
+                help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
+            ),
+            click.option(
+                "--no-cache", is_flag=True, help="Ignore the tag cache for this run"
+            ),
+        ]
+        if refresh:
+            options.insert(
+                0,
+                click.option(
+                    "--refresh",
+                    is_flag=True,
+                    help="Rescan the library and rewrite the tag cache, instead of "
+                    "reading the cache as is",
+                ),
+            )
+        for option in reversed(options):
+            command = option(command)
+        return command
+
+    return decorate
+
+
 @cli.command()
-@click.option("--config", default="matrix.yaml", help="The YAML configuration file")
-@click.option("--debug", help="Enable debug logging", is_flag=True)
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
-)
-@click.option("--no-cache", is_flag=True, help="Ignore the tag cache for this run")
+@_library_options()
 @click.option(
     "--prune",
     is_flag=True,
     help="Delete destination files that no matrix copied (off by default)",
 )
-def run(config, debug, verbose, no_cache, prune):
+def run(matrix):
     """Run the matrix described by a configuration file."""
-    MixtapeMatrix(
-        config=config,
-        debug=debug,
-        verbose=verbose,
-        use_cache=not no_cache,
-        prune=prune,
-    ).run()
+    matrix.run()
 
 
 @cli.command()
@@ -248,37 +279,6 @@ def _filter_options(func):
     return func
 
 
-def _library_options(func):
-    """The options every command that reads the library shares."""
-    for option in reversed(
-        [
-            click.option(
-                "--config", default="matrix.yaml", help="The YAML configuration file"
-            ),
-            click.option("--debug", help="Enable debug logging", is_flag=True),
-            click.option(
-                "--verbose",
-                is_flag=True,
-                help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
-            ),
-            click.option(
-                "--no-cache", is_flag=True, help="Ignore the tag cache for this run"
-            ),
-        ]
-    ):
-        func = option(func)
-    return func
-
-
-def _refresh_option(func):
-    return click.option(
-        "--refresh",
-        is_flag=True,
-        help="Rescan the library and rewrite the tag cache, instead of reading the "
-        "cache as is",
-    )(func)
-
-
 def _filters(options: dict) -> dict[TagField, str]:
     """The --<tag> filters that were given, keyed by tag name."""
     return {
@@ -291,9 +291,8 @@ def _filters(options: dict) -> dict[TagField, str]:
 @list_group.command(name="tag")
 @click.argument("field", type=click.Choice(TAG_FIELDS))
 @_filter_options
-@_refresh_option
-@_library_options
-def list_tag(field, config, debug, verbose, no_cache, refresh, **options):
+@_library_options(refresh=True)
+def list_tag(field, matrix, **options):
     """List distinct values of a tag.
 
     FIELD is one of artist, album, genre or album_artist. Prints each distinct
@@ -323,14 +322,7 @@ def list_tag(field, config, debug, verbose, no_cache, refresh, **options):
       mixtape list tag genre --config other.yaml
       mixtape list tag album_artist --no-cache
     """
-    values = MixtapeMatrix(
-        config=config,
-        debug=debug,
-        verbose=verbose,
-        use_cache=not no_cache,
-        refresh=refresh,
-    ).list_tag(field, where=_filters(options))
-    for value in values:
+    for value in matrix.list_tag(field, where=_filters(options)):
         click.echo(value)
 
 
@@ -343,9 +335,8 @@ def describe_group():
 @click.argument("field", type=click.Choice(TAG_FIELDS))
 @click.argument("value", required=False)
 @_filter_options
-@_refresh_option
-@_library_options
-def describe_tag(field, value, config, debug, verbose, no_cache, refresh, **options):
+@_library_options(refresh=True)
+def describe_tag(field, value, matrix, **options):
     """Show a tag's values as a tree.
 
     The tag you choose is the top level. Below it comes whatever is left of
@@ -380,20 +371,13 @@ def describe_tag(field, value, config, debug, verbose, no_cache, refresh, **opti
       mixtape describe tag genre funk          only the funk section
       mixtape describe tag genre --artist Alpha
     """
-    lines = MixtapeMatrix(
-        config=config,
-        debug=debug,
-        verbose=verbose,
-        use_cache=not no_cache,
-        refresh=refresh,
-    ).describe_tag(field, value, where=_filters(options))
-    for line in lines:
+    for line in matrix.describe_tag(field, value, where=_filters(options)):
         click.echo(line)
 
 
 @describe_group.command(name="untagged")
-@_library_options
-def describe_untagged(config, debug, verbose, no_cache):
+@_library_options()
+def describe_untagged(matrix):
     """List MP3 files that have no ID3 tag.
 
     Prints the full path of every untagged MP3 in every matrix source in the
@@ -412,9 +396,7 @@ def describe_untagged(config, debug, verbose, no_cache):
       mixtape describe untagged --config other.yaml
       mixtape describe untagged --no-cache
     """
-    for path in MixtapeMatrix(
-        config=config, debug=debug, verbose=verbose, use_cache=not no_cache
-    ).describe_untagged():
+    for path in matrix.describe_untagged():
         click.echo(path)
 
 
