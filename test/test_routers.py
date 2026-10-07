@@ -356,3 +356,185 @@ def test_verbose_tag_warnings_name_the_file(tmp_path, capsys):
         assert f"{path}: Invalid date: 0106" in capsys.readouterr().err
     finally:
         configure_tag_logging(verbose=False)
+
+
+@pytest.fixture
+def folders(library):
+    make_mp3(library / "a" / "deep" / "four.mp3", artist="Gamma", genre="Pop")
+    make_mp3(library / "rock" / "x.mp3", artist="Delta", genre="Rock")
+    make_mp3(library / "rockabilly" / "y.mp3", artist="Epsilon", genre="Rock")
+    return library
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        # every tagged mp3 beneath the folder, nested ones included, whatever its tags
+        ([{"folder": "a"}], ["four.mp3", "one.mp3", "two.mp3"]),
+        # whole path components: rock does not match rockabilly
+        ([{"folder": "rock"}], ["x.mp3"]),
+        # untagged mp3s are still not copied
+        ([{"folder": "b"}], ["three.mp3"]),
+        # any key matches, as for tags
+        (
+            [{"folder": "a", "artist": "Alpha"}],
+            ["four.mp3", "one.mp3", "three.mp3", "two.mp3"],
+        ),
+        ([{"folder": "rock"}, {"artist": "Beta"}], ["two.mp3", "x.mp3"]),
+        # trailing-** prefix patterns, as in exclude_paths: rock** includes rockabilly
+        ([{"folder": "rock**"}], ["x.mp3", "y.mp3"]),
+        ([{"folder": "a/**"}], ["four.mp3", "one.mp3", "two.mp3"]),
+        ([{"folder": "a/deep/**"}], ["four.mp3"]),
+        ([{"folder": "nope/**"}], []),  # glob entries need not exist
+        ([{"artist": "Alpha", "exclude": {"folder": "a/**"}}], ["three.mp3"]),
+        ([{"folder": "a", "exclude": {"folder": "a/d**"}}], ["one.mp3", "two.mp3"]),
+        # tags may exclude folders, folders may exclude tags, and either may nest
+        ([{"artist": "Alpha", "exclude": {"folder": "a"}}], ["three.mp3"]),
+        ([{"folder": "a", "exclude": {"genre": "metal"}}], ["four.mp3", "one.mp3"]),
+        ([{"folder": "a", "exclude": {"folder": "a/deep"}}], ["one.mp3", "two.mp3"]),
+        (
+            [
+                {
+                    "folder": "a",
+                    "exclude": {
+                        "folder": "a/deep",
+                        "exclude": {"artist": "Gamma"},
+                    },
+                }
+            ],
+            ["four.mp3", "one.mp3", "two.mp3"],
+        ),
+    ],
+)
+def test_folder_entries(tmp_path, folders, entries, expected):
+    def absolute(entry):
+        entry = dict(entry)
+        if "folder" in entry:
+            entry["folder"] = str(folders / entry["folder"])
+        if "exclude" in entry:
+            entry["exclude"] = absolute(entry["exclude"])
+        return entry
+
+    router = make_router(tmp_path, folders, [absolute(e) for e in entries])
+    assert matched(router) == expected
+
+
+def test_exclude_paths_win_over_folder(tmp_path, folders):
+    router = make_router(
+        tmp_path,
+        folders,
+        [{"folder": str(folders / "a")}],
+        exclude_paths=[folders / "a" / "deep"],
+    )
+    assert matched(router) == ["one.mp3", "two.mp3"]
+
+
+def test_folder_entry_reads_no_extra_tags(tmp_path, folders, read_counter):
+    router = make_router(tmp_path, folders, [{"folder": str(folders / "a")}])
+    matched(router)
+    read_counter.clear()
+    router = make_router(tmp_path, folders, [{"folder": str(folders / "rock")}])
+    assert matched(router) == ["x.mp3"]
+    assert read_counter == []  # changing folders reuses the tag cache
+
+
+def test_folder_must_be_absolute():
+    from mixtapematrix.config import Mp3Match
+
+    with pytest.raises(ValueError, match="absolute"):
+        Mp3Match(folder="a")
+
+
+def test_exclude_needs_a_key_to_match_but_folder_counts():
+    from mixtapematrix.config import Mp3Match
+
+    with pytest.raises(ValueError, match="at least one"):
+        Mp3Match(exclude={"folder": "/music/a"})
+    Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
+
+
+@pytest.mark.parametrize("where", ["missing", "outside", "outside_glob"])
+def test_bad_folders_fail_before_copying(tmp_path, folders, where):
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    folder = {
+        "missing": folders / "nope",
+        "outside": outside,
+        "outside_glob": tmp_path / "elsewh**",
+    }[where]
+    router = make_router(tmp_path, folders, [{"folder": str(folder)}])
+    with pytest.raises(ValueError, match="Folder"):
+        matched(router)
+
+
+def test_prune_keeps_files_copied_through_a_folder(tmp_path, folders):
+    import yaml
+    from click.testing import CliRunner
+
+    from mixtapematrix.main import cli
+
+    out = tmp_path / "dest"
+    (out / "stale").mkdir(parents=True)
+    (out / "stale" / "old.mp3").touch()
+    config = tmp_path / "matrix.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "matrix": [
+                    {
+                        "source_path": str(folders),
+                        "destination_path": str(out),
+                        "mp3_files": [{"folder": str(folders / "a")}],
+                    }
+                ]
+            }
+        )
+    )
+    result = CliRunner().invoke(cli, ["run", "--config", str(config), "--prune"])
+    assert result.exit_code == 0, result.output
+    assert sorted(p.name for p in out.rglob("*.mp3")) == [
+        "four.mp3",
+        "one.mp3",
+        "two.mp3",
+    ]
+
+
+BAD_PATTERNS = ["/m/*/rock", "/m/ro?k", "/m/[rp]ock", "/m/*.mp3"]
+GOOD_PATTERNS = ["/m/rock", "/m/rock**", "/m/rock/**"]
+
+
+def path_pattern_fields():
+    """Each way a config takes a path pattern: name -> builder from one value."""
+    from mixtapematrix.config import MatrixConfig, Mp3Match
+
+    return {
+        "exclude_paths": lambda value: MatrixConfig(
+            source_path="/m",
+            exclude_paths=[value],
+            destination_path="/d",
+            mp3_files=[{"artist": "x"}],
+        ),
+        "folder": lambda value: Mp3Match(folder=value),
+    }
+
+
+@pytest.mark.parametrize("field", ["exclude_paths", "folder"])
+@pytest.mark.parametrize("pattern", BAD_PATTERNS)
+def test_path_fields_reject_the_same_patterns(field, pattern):
+    with pytest.raises(ValueError, match="trailing '\\*\\*'"):
+        path_pattern_fields()[field](pattern)
+
+
+@pytest.mark.parametrize("field", ["exclude_paths", "folder"])
+@pytest.mark.parametrize("pattern", GOOD_PATTERNS)
+def test_path_fields_accept_the_same_patterns(field, pattern):
+    path_pattern_fields()[field](pattern)
+
+
+def test_path_fields_use_the_shared_pattern_type():
+    """New location fields must use PathPattern so the glob contract stays in one place."""
+    from mixtapematrix.config import MatrixConfig, Mp3Match
+    from mixtapematrix.routers.files import PathPattern
+
+    assert MatrixConfig.model_fields["exclude_paths"].annotation == list[PathPattern]
+    assert Mp3Match.model_fields["folder"].annotation == PathPattern | None

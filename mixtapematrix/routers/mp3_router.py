@@ -10,7 +10,15 @@ from eyed3.id3 import Genre, Tag
 from ..cache import TAG_FIELDS, Entry, TagCache, Tags
 from ..config import MatrixConfig, Mp3Match
 from ..progress import ProgressFactory, no_progress
-from .files import File, FileRouter, make_exclusion_test, search_files
+from .files import (
+    File,
+    FileRouter,
+    glob_prefix,
+    is_glob,
+    make_exclusion_test,
+    search_files,
+    subtree_test,
+)
 
 _EYED3_LOGGER = logging.getLogger("eyed3")
 _eyed3_handlers: list[logging.Handler] = []
@@ -91,15 +99,19 @@ def _tag_matches(tags: Tags, key: str, value: str) -> bool:
     return tag_value is not None and tag_value.lower() == value.lower()
 
 
-def _entry_matches(tags: Tags, entry: Mp3Match) -> bool:
+def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:
     """
-    An entry matches when any of its own tags match and its exclude block does not.
-    An exclude block is evaluated the same way, so nested excludes work to any depth.
+    An entry matches when any of its own tags match, or its folder holds the (absolute)
+    path, and its exclude block does not. An exclude block is evaluated the same way,
+    so nested excludes work to any depth.
     """
     own = [(k, v) for k in TAG_FIELDS if (v := getattr(entry, k)) is not None]
-    if not any(_tag_matches(tags, k, v) for k, v in own):
+    if not (
+        any(_tag_matches(tags, k, v) for k, v in own)
+        or (entry.folder is not None and subtree_test(entry.folder)(path))
+    ):
         return False
-    return entry.exclude is None or not _entry_matches(tags, entry.exclude)
+    return entry.exclude is None or not _entry_matches(tags, path, entry.exclude)
 
 
 class TagRouter(FileRouter):
@@ -153,6 +165,19 @@ class TagRouter(FileRouter):
                 f"{self.matrix_config.source.path} is not a directory. TagRouter only works on directories, not individual files."
             )
         _ = self.matrix_config.excluded_files  # fails fast on a missing literal path
+        root = os.path.abspath(self.matrix_config.source.path)
+        for entry in self.matrix_config.mp3_files:
+            for folder in entry.folders():
+                # Like exclude_paths, glob entries need not exist; plain ones must.
+                if not is_glob(folder) and not os.path.isdir(folder):
+                    raise ValueError(f"Folder {folder} is not an existing directory")
+                inside = (
+                    glob_prefix(folder).startswith(os.path.join(root, ""))
+                    if is_glob(folder)
+                    else subtree_test(root)(os.path.abspath(folder))
+                )
+                if not inside:
+                    raise ValueError(f"Folder {folder} is not inside {root}")
 
     def _mp3_paths(self) -> list[str]:
         """Every non-excluded MP3 under the source directory."""
@@ -261,11 +286,14 @@ class TagRouter(FileRouter):
         No arguments are needed, as the matrix_config is already set in the constructor.
         """
         source_path = self.matrix_config.source.path
+        root = os.path.abspath(source_path)
         found = self._discover_tags(self._mp3_paths())
         for rel, (_, tags) in found.items():
             if tags is None:
                 continue  # No ID3 tag: this tool only works with tagged files.
+            absolute = os.path.join(root, rel)
             if any(
-                _entry_matches(tags, entry) for entry in self.matrix_config.mp3_files
+                _entry_matches(tags, absolute, entry)
+                for entry in self.matrix_config.mp3_files
             ):
                 yield File(path=os.path.join(source_path, rel))
