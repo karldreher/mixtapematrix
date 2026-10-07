@@ -5,20 +5,7 @@ import struct
 import pytest
 from helpers import make_mp3
 
-from mixtapematrix.routers.files import File
 from mixtapematrix.routers.mp3_router import configure_tag_logging
-
-
-def test_file(tmp_path):
-    file = File(path=str(tmp_path))
-    assert file.is_dir
-    assert not file.is_file
-
-
-def test_invalid_file(tmp_path):
-    with pytest.raises(ValueError):
-        File(path=str(tmp_path / "invalid"))
-
 
 # TODO: test TagRouter, need fixture for some mp3 files
 
@@ -53,7 +40,7 @@ def make_router(tmp_path, library, mp3_files, cache=True, exclude_paths=()):
 
 
 def matched(router):
-    return sorted(os.path.basename(f.path) for f in router.source)
+    return sorted(os.path.basename(f) for f in router.source)
 
 
 def test_router_matches_without_cache(tmp_path, library, read_counter):
@@ -505,3 +492,20 @@ def test_path_fields_use_the_shared_pattern_type():
 
     assert MatrixConfig.model_fields["exclude_paths"].annotation == list[PathPattern]
     assert Mp3Match.model_fields["folder"].annotation == PathPattern | None
+
+
+def test_copy_file_maps_the_relative_path_and_never_overwrites(tmp_path):
+    from mixtapematrix.routers.files import copy_file
+
+    # The source root appears twice in the path: only the leading one is replaced.
+    root = tmp_path / "a" / "a"
+    song = root / "a" / "song.mp3"
+    song.parent.mkdir(parents=True)
+    song.write_bytes(b"new")
+    destination = tmp_path / "out"
+    target = copy_file(str(song), str(root), str(destination))
+    assert target == str(destination / "a" / "song.mp3")
+    assert (destination / "a" / "song.mp3").read_bytes() == b"new"
+    (destination / "a" / "song.mp3").write_bytes(b"kept")
+    assert copy_file(str(song), str(root), f"{destination}/") == target
+    assert (destination / "a" / "song.mp3").read_bytes() == b"kept"

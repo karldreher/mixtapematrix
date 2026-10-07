@@ -2,7 +2,6 @@ import json
 import os
 import sys
 from datetime import timedelta
-from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -13,13 +12,12 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     WithJsonSchema,
-    computed_field,
     field_validator,
     model_validator,
 )
 
 from .cache import TTL_PATTERN, parse_ttl
-from .routers.files import File, PathPattern, is_glob, paths_overlap
+from .routers.files import PathPattern, is_glob, paths_overlap
 
 CONFIG_FILENAME = "matrix.yaml"
 SCHEMA_FILENAME = "matrix.schema.json"
@@ -136,27 +134,6 @@ class MatrixConfig(BaseModel):
             )
         return data
 
-    # While the input source_path, destination_.., and exclude_.. are strings,
-    # the properties source, destination, and excluded_files are File objects
-    # source and destination are built once and never touch the filesystem: the
-    # default config names paths that do not exist, so ConfigFile.check_paths
-    # verifies them, once, when a command needs the real directories.
-    @computed_field
-    @cached_property
-    def source(self) -> File:
-        return File.model_construct(path=self.source_path)
-
-    @computed_field
-    @cached_property
-    def destination(self) -> File:
-        return File.model_construct(path=self.destination_path)
-
-    @computed_field
-    @property
-    def excluded_files(self) -> list[File]:
-        # Glob entries need not exist; only literal paths are checked.
-        return [File(path=p) for p in self.exclude_paths if not is_glob(p)]
-
     mp3_files: list[Mp3Match]
     """Tag and folder matches; a file is copied when it matches any entry."""
 
@@ -240,7 +217,8 @@ class ConfigFile(BaseModel):
 
     def check_paths(self) -> None:
         """
-        Require every source_path and destination_path to be an existing directory.
+        Require every source_path and destination_path to be an existing directory,
+        and every literal exclude_paths entry (glob entries need not exist) to exist.
         This is separate from validation because the default config, which must
         validate, uses placeholder paths. Raises a one-line ClickException.
         """
@@ -254,6 +232,11 @@ class ConfigFile(BaseModel):
                 else:
                     continue
                 raise click.ClickException(f"matrix[{i}].{field}: {path} {problem}")
+            for path in matrix.exclude_paths:
+                if not is_glob(path) and not os.path.exists(path):
+                    raise click.ClickException(
+                        f"matrix[{i}].exclude_paths: {path} does not exist"
+                    )
 
     @staticmethod
     def json_schema() -> dict:

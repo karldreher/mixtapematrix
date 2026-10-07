@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import timedelta
 
 import click
@@ -9,7 +8,7 @@ from click.testing import CliRunner
 from helpers import cache_files, make_mp3, write_config
 from jsonschema import Draft202012Validator
 
-from mixtapematrix.config import ConfigFile, MatrixConfig, Mp3Match
+from mixtapematrix.config import ConfigFile, Mp3Match
 from mixtapematrix.main import MixtapeMatrix, cli
 
 
@@ -38,8 +37,8 @@ def transform_config(tmp_path, *commands):
 
 def test_config(tmp_path):
     config = MixtapeMatrix(str(transform_config(tmp_path, "true"))).config_data
-    assert config.matrix[0].source.path == str(tmp_path / "source")
-    assert config.matrix[0].destination.path == str(tmp_path / "output")
+    assert config.matrix[0].source_path == str(tmp_path / "source")
+    assert config.matrix[0].destination_path == str(tmp_path / "output")
     assert config.transform.commands == ["true"]
 
 
@@ -122,12 +121,10 @@ def test_default_template_validates(tmp_path, monkeypatch):
     assert ConfigFile.model_validate(data).matrix[0].mp3_files
 
 
-def test_schema_excludes_computed_fields_and_forbids_extras():
+def test_schema_forbids_extras_and_describes_every_property():
     schema = ConfigFile.json_schema()
     matrix = schema["$defs"]["MatrixConfig"]
-    assert not {"source", "destination", "excluded_files"} & set(matrix["properties"])
     assert all(d["additionalProperties"] is False for d in schema["$defs"].values())
-    assert "File" not in schema["$defs"]
     assert all("description" in p for p in matrix["properties"].values())
 
 
@@ -358,15 +355,24 @@ def test_exclude_only_entry_rejected():
     Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
 
 
-def test_missing_exclude_path_fails_when_files_are_built(tmp_path):
-    matrix = MatrixConfig(
-        source_path=str(tmp_path),
-        exclude_paths=[str(tmp_path / "missing")],
-        destination_path=str(tmp_path),
-        mp3_files=[{"artist": "x"}],
+def test_missing_exclude_path_is_a_one_line_error(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    missing = tmp_path / "missing"
+    config = write_config(tmp_path, [library], exclude_paths=[missing])
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
+    assert result.exit_code != 0
+    assert result.output.strip() == (
+        f"Error: matrix[0].exclude_paths: {missing} does not exist"
     )
-    with pytest.raises(ValueError, match="does not exist"):
-        _ = matrix.excluded_files
+
+
+def test_missing_glob_exclude_path_is_accepted(tmp_path):
+    library = tmp_path / "library"
+    library.mkdir()
+    config = write_config(tmp_path, [library], exclude_paths=[f"{library}/nope/**"])
+    result = CliRunner().invoke(cli, ["list", "tag", "artist", "--config", str(config)])
+    assert result.exit_code == 0, result.output
 
 
 def test_schema_describes_exclude_options():
@@ -517,27 +523,3 @@ def test_default_config_validates_but_fails_the_path_check():
     config = ConfigFile.model_validate(yaml.safe_load(ConfigFile.default_config_yaml()))
     with pytest.raises(click.ClickException, match="source_path"):
         config.check_paths()
-
-
-def test_source_and_destination_do_not_touch_the_filesystem(tmp_path, monkeypatch):
-    calls = []
-    real_exists, real_isdir = os.path.exists, os.path.isdir
-    monkeypatch.setattr(os.path, "exists", lambda p: calls.append(p) or real_exists(p))
-    monkeypatch.setattr(os.path, "isdir", lambda p: calls.append(p) or real_isdir(p))
-    matrix = MatrixConfig(
-        source_path="/no/such/source",
-        destination_path="/no/such/destination",
-        mp3_files=[{"artist": "x"}],
-    )
-    for _ in range(3):
-        assert matrix.source.path == "/no/such/source"
-        assert matrix.destination.path == "/no/such/destination"
-    assert calls == []
-    assert matrix.source is matrix.source
-
-
-def test_no_path_is_special_cased_by_prefix(tmp_path):
-    from mixtapematrix.routers.files import File
-
-    with pytest.raises(ValueError, match="does not exist"):
-        File(path="/example/anything")

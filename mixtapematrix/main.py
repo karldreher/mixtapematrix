@@ -12,7 +12,7 @@ from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
 from .progress import TerminalProgress, no_progress
-from .routers.files import prune_destination
+from .routers.files import copy_file, prune_destination
 from .routers.mp3_router import TagRouter, _tag_matches, configure_tag_logging
 
 
@@ -65,7 +65,7 @@ class MixtapeMatrix:
             if self.use_cache and cache_config:
                 cache = TagCache(
                     self.config,
-                    matrix_config.source.path,
+                    matrix_config.source_path,
                     cache_config.ttl,
                     log=self.logger,
                     debug=self.debug,
@@ -128,16 +128,19 @@ class MixtapeMatrix:
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}
         for matrix_config, router in self._routers():
-            kept = keep.setdefault(matrix_config.destination.path, set())
+            kept = keep.setdefault(matrix_config.destination_path, set())
             # Listing first runs tag discovery (and its bar) to completion, and
             # gives the copy bar a total.
             files = list(router.source)
-            source, destination = matrix_config.source, matrix_config.destination
-            label = f"Copying files from {source.path}"
+            source, destination = (
+                matrix_config.source_path,
+                matrix_config.destination_path,
+            )
+            label = f"Copying files from {source}"
             with self.progress(label, len(files)) as bar:
                 for file in files:
-                    self.debug(f"Copying {file.path} to {destination.path}")
-                    kept.add(TagRouter.deeply_copy(file, source, destination))
+                    self.debug(f"Copying {file} to {destination}")
+                    kept.add(copy_file(file, source, destination))
                     bar.update(1)
         if self.prune:
             for root, kept in keep.items():
