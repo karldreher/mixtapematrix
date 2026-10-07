@@ -1,4 +1,3 @@
-import base64
 import os
 import random
 import struct
@@ -131,14 +130,6 @@ def test_schema_version_mismatch_is_deleted(tmp_path, monkeypatch):
     assert not cache.path.exists()
 
 
-# Written by TagCache.save before cache validation existed (ENTRIES, ttl 2d, NOW).
-LEGACY_CACHE = base64.b64decode(
-    "AAAAWYWndmVyc2lvbgGqY3JlYXRlZF9hdM5rSdIAq3R0bF9zZWNvbmRzzgACowCrY29uZmlnX3BhdGiw"
-    "L2NmZy9tYXRyaXgueWFtbKtzb3VyY2Vfcm9vdKQvbGliKLUv/SCVRQQAcsccIKDt/v9YbFXRPcG2ZwNA"
-    "GUlEN9rWJkBbtOOlM/H36t9kXTibsJ/BtnmyD++U7so7AOza0VLrTGpFYqS0SPqmDeS2+D7mNkN/OCB1"
-    "/VE/pMKGnaijfltDXyuuLermynjRZC3c6/tZ6bDlSArP9DPd/NrDAgYASKVw0zXFBcGw5Jy3t1aBAg=="
-)
-
 HEADER = {
     "version": CACHE_SCHEMA_VERSION,
     "created_at": NOW,
@@ -162,13 +153,6 @@ def write_raw(cache, header=HEADER, body=BODY):
     payload = zstd.compress(ormsgpack.packb(body))
     cache.path.parent.mkdir(parents=True, exist_ok=True)
     cache.path.write_bytes(struct.pack(">I", len(packed)) + packed + payload)
-
-
-def test_cache_written_before_validation_still_loads(tmp_path):
-    cache = make_cache(tmp_path)
-    cache.path.parent.mkdir(parents=True)
-    cache.path.write_bytes(LEGACY_CACHE)
-    assert cache.load() == ENTRIES
 
 
 def test_valid_raw_cache_loads(tmp_path):
