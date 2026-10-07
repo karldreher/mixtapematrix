@@ -308,11 +308,26 @@ class Removed:
     size: int
 
 
-def _stale_reason(path: Path, now: float) -> str | None:
+@dataclass(frozen=True)
+class Listed:
+    name: str
+    size: int
+    status: str
+    """`ok`, or the reason `clean_cache` would remove it."""
+    header: CacheHeader | None
+    """None when the header is unreadable."""
+
+
+def _read_header_at(path: Path) -> CacheHeader | None:
     try:
         with path.open("rb") as f:
-            header = _read_header(f)
+            return _read_header(f)
     except _READ_ERRORS:
+        return None
+
+
+def _stale_reason(header: CacheHeader | None, now: float) -> str | None:
+    if header is None:
         return "unreadable"
     if header.version != CACHE_SCHEMA_VERSION:
         return "unknown format version"
@@ -323,6 +338,28 @@ def _stale_reason(path: Path, now: float) -> str | None:
     if not Path(header.source_root).exists():
         return "orphaned: source path is gone"
     return None
+
+
+def _cache_files(directory: Path) -> list[Path]:
+    """Regular files in the cache directory; symlinks and subdirectories are skipped."""
+    if not directory.is_dir():
+        return []
+    return [
+        p for p in sorted(directory.iterdir()) if p.is_file() and not p.is_symlink()
+    ]
+
+
+def list_cache(
+    now: Callable[[], float] = time.time, directory: Path | None = None
+) -> list[Listed]:
+    """Every cache file with its status, without decoding any body."""
+    listed = []
+    for path in _cache_files(directory or cache_dir()):
+        if path.name.endswith(CACHE_SUFFIX) and not path.name.endswith(TMP_SUFFIX):
+            header = _read_header_at(path)
+            status = _stale_reason(header, now()) or "ok"
+            listed.append(Listed(path.name, path.stat().st_size, status, header))
+    return listed
 
 
 def clean_cache(
@@ -336,16 +373,12 @@ def clean_cache(
     single-instance lock, so no other process can be mid-write while this runs.
     """
     directory = directory or cache_dir()
-    if not directory.is_dir():
-        return []
     removed: list[Removed] = []
-    for path in sorted(directory.iterdir()):
-        if path.is_symlink() or not path.is_file():
-            continue
+    for path in _cache_files(directory):
         if path.name.endswith(TMP_SUFFIX):
             reason = "interrupted write"
         elif path.name.endswith(CACHE_SUFFIX):
-            reason = "all" if all_files else _stale_reason(path, now())
+            reason = "all" if all_files else _stale_reason(_read_header_at(path), now())
         else:
             continue
         if reason is None:

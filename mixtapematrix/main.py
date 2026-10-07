@@ -8,7 +8,15 @@ import click
 import yaml
 from pydantic import ValidationError
 
-from .cache import TAG_FIELDS, TAG_INDEX, TagCache, TagField, Tags, clean_cache
+from .cache import (
+    TAG_FIELDS,
+    TAG_INDEX,
+    TagCache,
+    TagField,
+    Tags,
+    clean_cache,
+    list_cache,
+)
 from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
@@ -403,6 +411,19 @@ def describe_untagged(matrix):
 @cli.group(name="cache")
 def cache_group():
     """Manage the tag cache."""
+
+
+@cache_group.command(name="list")
+def list_command():
+    """List tag caches with their status, size, source path and config file."""
+    caches = list_cache()
+    for item in caches:
+        line = f"{item.name}  {item.status}  {_format_bytes(item.size)}"
+        if item.header:
+            line += f"  {item.header.source_root}  (config: {item.header.config_path})"
+        click.echo(line)
+    if not caches:
+        click.echo("No cache files")
 
 
 @cache_group.command()

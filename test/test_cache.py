@@ -1,10 +1,12 @@
 import os
 import random
 import struct
+import time
 from datetime import timedelta
 
 import ormsgpack
 import pytest
+from click.testing import CliRunner
 from compression import zstd
 
 from mixtapematrix import cache as cache_module
@@ -17,8 +19,10 @@ from mixtapematrix.cache import (
     cache_dir,
     cache_key,
     clean_cache,
+    list_cache,
     parse_ttl,
 )
+from mixtapematrix.main import cli
 
 NOW = 1_800_000_000
 
@@ -350,3 +354,32 @@ def test_clean_does_not_follow_symlinks(tmp_path):
     (directory / f"link{CACHE_SUFFIX}").symlink_to(outside)
     assert clean_cache(all_files=True) == []
     assert outside.exists()
+
+
+def test_list_reports_status_and_header(tmp_path):
+    ok = write_cache_file(tmp_path, "ok.yaml")
+    expired = write_cache_file(tmp_path, "old.yaml", ttl="1h", now=NOW - 7200)
+    bad = write_cache_file(tmp_path, "bad.yaml")
+    bad.path.write_bytes(b"junk")
+    (cache_dir() / f"stray{TMP_SUFFIX}").write_bytes(b"partial")
+    listed = {i.name: i for i in list_cache(now=lambda: NOW)}
+    assert {n: i.status for n, i in listed.items()} == {
+        ok.path.name: "ok",
+        expired.path.name: "expired",
+        bad.path.name: "unreadable",
+    }
+    assert listed[ok.path.name].header.source_root == str(ok.source_root)
+    assert listed[bad.path.name].header is None
+    assert all(i.size > 0 for i in listed.values())
+
+
+def test_list_with_missing_directory_is_empty():
+    assert list_cache() == []
+
+
+def test_list_command_output(tmp_path):
+    assert CliRunner().invoke(cli, ["cache", "list"]).output == "No cache files\n"
+    cache = write_cache_file(tmp_path, "a.yaml", now=time.time())
+    out = CliRunner().invoke(cli, ["cache", "list"]).output
+    assert out.startswith(f"{cache.path.name}  ok  ")
+    assert f"{cache.source_root}  (config: {cache.config_path})" in out
