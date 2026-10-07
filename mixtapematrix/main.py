@@ -55,18 +55,24 @@ class MixtapeMatrix:
         config.check_paths()
         return config
 
-    def tag_cache(self, matrix_config: MatrixConfig) -> TagCache | None:
-        """The tag cache for a matrix, or None when caching is off for this run."""
+    def _routers(self) -> Iterator[tuple[MatrixConfig, TagRouter]]:
+        """A router per matrix, with the tag cache on unless this run turns it off."""
+        configure_tag_logging(self.verbose)
         cache_config = self.config_data.cache
-        if not (self.use_cache and cache_config):
-            return None
-        return TagCache(
-            self.config,
-            matrix_config.source.path,
-            cache_config.ttl,
-            log=self.logger,
-            debug=self.debug,
-        )
+        for matrix_config in self.config_data.matrix:
+            cache = None
+            if self.use_cache and cache_config:
+                cache = TagCache(
+                    self.config,
+                    matrix_config.source.path,
+                    cache_config.ttl,
+                    log=self.logger,
+                    debug=self.debug,
+                )
+            yield (
+                matrix_config,
+                TagRouter(matrix_config, cache=cache, progress=self.progress),
+            )
 
     def _entries(self, where: list[tuple[TagField, str]]) -> Iterator[tuple[str, Tags]]:
         """
@@ -76,13 +82,7 @@ class MixtapeMatrix:
         """
         for key, _ in where:
             tag_index(key)
-        configure_tag_logging(self.verbose)
-        for matrix_config in self.config_data.matrix:
-            router = TagRouter(
-                matrix_config,
-                cache=self.tag_cache(matrix_config),
-                progress=self.progress,
-            )
+        for _, router in self._routers():
             for path, tags in router.entries(refresh=self.refresh):
                 if all(_tag_matches(tags, k, v) for k, v in where):
                     yield path, tags
@@ -119,28 +119,16 @@ class MixtapeMatrix:
 
     def describe_untagged(self) -> list[str]:
         """Every MP3 with no readable ID3 tag across the matrix sources, sorted."""
-        configure_tag_logging(self.verbose)
         found: set[str] = set()
-        for matrix_config in self.config_data.matrix:
-            router = TagRouter(
-                matrix_config,
-                cache=self.tag_cache(matrix_config),
-                progress=self.progress,
-            )
+        for _, router in self._routers():
             found.update(router.untagged())
         return sorted(found, key=str.casefold)
 
     def run(self):
-        configure_tag_logging(self.verbose)
         # Destinations can be shared between matrices, so pruning waits until
         # every matrix has copied: a file is kept if any matrix put it there.
         keep: dict[str, set[str]] = {}
-        for matrix_config in self.config_data.matrix:
-            router = TagRouter(
-                matrix_config,
-                cache=self.tag_cache(matrix_config),
-                progress=self.progress,
-            )
+        for matrix_config, router in self._routers():
             kept = keep.setdefault(matrix_config.destination.path, set())
             # Listing first runs tag discovery (and its bar) to completion, and
             # gives the copy bar a total.
