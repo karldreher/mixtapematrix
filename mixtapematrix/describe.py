@@ -17,14 +17,17 @@ the order the filesystem lists files in.
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
-from .cache import TAG_FIELDS, Tags
+from .cache import TagField, Tags, tag_index
 
 # The levels songs can be nested under, outermost first.
-LEVELS = ("artist", "album")
-UNKNOWN = {"artist": "(unknown artist)", "album": "(unknown album)"}
+LEVELS: tuple[TagField, ...] = ("artist", "album")
+UNKNOWN: dict[TagField, str] = {
+    "artist": "(unknown artist)",
+    "album": "(unknown album)",
+}
 
 
-def levels_below(field: str) -> tuple[str, ...]:
+def levels_below(field: TagField) -> tuple[TagField, ...]:
     """The levels between FIELD and the songs: the rest of the chain after FIELD."""
     return LEVELS[LEVELS.index(field) + 1 :] if field in LEVELS else LEVELS
 
@@ -45,12 +48,12 @@ class Node:
         return node
 
 
-def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[str, ...]) -> Node:
+def build_tree(rows: Iterable[tuple[str, Tags]], levels: tuple[TagField, ...]) -> Node:
     """
     A tree of `levels` (outermost first) with songs at the bottom. A level with no
     value and no UNKNOWN placeholder leaves the row out.
     """
-    steps = [(TAG_FIELDS.index(level), UNKNOWN.get(level)) for level in levels]
+    steps = [(tag_index(level), UNKNOWN.get(level)) for level in levels]
     root = Node()
     for path, tags in rows:
         node = root
@@ -82,7 +85,7 @@ def render_children(node: Node, prefix: str = "") -> Iterator[str]:
             yield from render_children(item, prefix + ("    " if last else "│   "))
 
 
-def describe(rows: Iterable[tuple[str, Tags]], tag: str) -> Iterator[str]:
+def describe(rows: Iterable[tuple[str, Tags]], tag: TagField) -> Iterator[str]:
     """
     One section per distinct value of `tag`, sorted, each headed by that value with
     the rest of artist > album > song beneath it. Files with no value for `tag` are
