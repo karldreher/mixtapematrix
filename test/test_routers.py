@@ -420,14 +420,6 @@ def test_folder_must_be_absolute():
         Mp3Match(folder="a")
 
 
-def test_exclude_needs_a_key_to_match_but_folder_counts():
-    from mixtapematrix.config import Mp3Match
-
-    with pytest.raises(ValueError, match="at least one"):
-        Mp3Match(exclude={"folder": "/music/a"})
-    Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
-
-
 @pytest.mark.parametrize("where", ["missing", "outside", "outside_glob"])
 def test_bad_folders_fail_before_copying(tmp_path, folders, where):
     outside = tmp_path / "elsewhere"

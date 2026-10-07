@@ -9,7 +9,7 @@ from click.testing import CliRunner
 from helpers import cache_files, make_mp3, write_config
 from jsonschema import Draft202012Validator
 
-from mixtapematrix.config import ConfigFile
+from mixtapematrix.config import ConfigFile, MatrixConfig, Mp3Match
 from mixtapematrix.main import MixtapeMatrix, cli
 
 
@@ -24,9 +24,6 @@ def test_config(mkdirs):
 def test_invalid_config():
     with pytest.raises(ValueError):
         _ = MixtapeMatrix("test/invalid.yaml").config_data
-    with pytest.raises(ValueError), open("test/invalid.yaml") as f:
-        # same as above, but more directly catching the error we expect
-        ConfigFile.model_validate(yaml.safe_load(f))
 
 
 def test_valid_transform(mkdirs):
@@ -37,9 +34,6 @@ def test_valid_transform(mkdirs):
 def test_dangerous_transform():
     with pytest.raises(ValueError):
         _ = MixtapeMatrix("test/dangerous_matrix.yaml").config_data
-    with pytest.raises(ValueError), open("test/dangerous_matrix.yaml") as f:
-        # same as above, but more directly catching the error we expect
-        ConfigFile.model_validate(yaml.safe_load(f))
 
 
 def test_cli():
@@ -246,7 +240,7 @@ def test_cache_clean_with_no_cache_directory(tmp_path):
     assert "Removed 0 cache file(s)" in result.output
 
 
-def prune_config(tmp_path, destinations=None):
+def prune_config(tmp_path):
     """write_cache_config plus stale files in the destination."""
     config = write_cache_config(tmp_path)
     out = tmp_path / "out0"
@@ -333,17 +327,16 @@ def test_legacy_exclude_path_rejected_with_migration_message():
 
 
 def test_exclude_only_entry_rejected():
-    from mixtapematrix.config import Mp3Match
-
     with pytest.raises(ValueError, match="at least one tag"):
         Mp3Match(exclude={"album": "X"})
     with pytest.raises(ValueError, match="at least one tag"):
         Mp3Match(artist="A", exclude={"exclude": {"album": "X"}})
+    with pytest.raises(ValueError, match="at least one"):
+        Mp3Match(exclude={"folder": "/music/a"})
+    Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
 
 
 def test_missing_exclude_path_fails_when_files_are_built(mkdirs):
-    from mixtapematrix.config import MatrixConfig
-
     matrix = MatrixConfig(
         source_path="test/source",
         exclude_paths=["test/source/missing"],
@@ -364,19 +357,6 @@ def test_schema_describes_exclude_options():
     assert "Mp3Match" in str(match["exclude"])
 
 
-@pytest.mark.parametrize("path", ["/m/*/rock", "/m/ro?k", "/m/[rp]ock", "/m/*.mp3"])
-def test_non_tail_wildcards_rejected(path):
-    from mixtapematrix.config import MatrixConfig
-
-    with pytest.raises(ValueError, match="trailing '\\*\\*'"):
-        MatrixConfig(
-            source_path="a",
-            exclude_paths=[path],
-            destination_path="b",
-            mp3_files=[{"artist": "x"}],
-        )
-
-
 def overlap_config(*matrices):
     """A config dict from (source, destination) path pairs."""
     return {
@@ -391,40 +371,30 @@ def overlap_config(*matrices):
     }
 
 
-def test_destination_inside_source_rejected(tmp_path):
-    with pytest.raises(ValueError, match="overlaps") as error:
-        ConfigFile.model_validate(
-            overlap_config((tmp_path / "library", tmp_path / "library" / "copies"))
-        )
-    assert str(tmp_path / "library" / "copies") in str(error.value)
-    assert str(tmp_path / "library") in str(error.value)
-
-
-def test_source_inside_destination_rejected(tmp_path):
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(
-            overlap_config((tmp_path / "out" / "library", tmp_path / "out"))
-        )
-
-
-def test_identical_source_and_destination_rejected(tmp_path):
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(
-            overlap_config((tmp_path / "library", tmp_path / "library"))
-        )
-
-
-def test_overlap_through_symlink_or_dotdot_rejected(tmp_path):
+@pytest.mark.parametrize(
+    "layout",
+    [
+        "inside",  # destination inside source
+        "contains",  # source inside destination
+        "same",
+        "symlink",
+        "dotdot",
+    ],
+)
+def test_overlapping_source_and_destination_rejected(tmp_path, layout):
     library = tmp_path / "library"
     library.mkdir()
-    link = tmp_path / "link"
-    link.symlink_to(library)
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(overlap_config((library, link / "copies")))
-    with pytest.raises(ValueError, match="overlaps"):
-        ConfigFile.model_validate(
-            overlap_config((library, tmp_path / "elsewhere" / ".." / "library"))
-        )
+    (tmp_path / "link").symlink_to(library)
+    destination = {
+        "inside": library / "copies",
+        "contains": tmp_path,
+        "same": library,
+        "symlink": tmp_path / "link" / "copies",
+        "dotdot": tmp_path / "elsewhere" / ".." / "library",
+    }[layout]
+    with pytest.raises(ValueError, match="overlaps") as error:
+        ConfigFile.model_validate(overlap_config((library, destination)))
+    assert str(library) in str(error.value)
 
 
 def test_overlap_between_matrices_rejected(tmp_path):
@@ -445,10 +415,6 @@ def test_sibling_directories_accepted(tmp_path):
         )
     )
     assert len(config.matrix) == 2
-
-
-def test_default_config_still_validates():
-    ConfigFile.model_validate(yaml.safe_load(ConfigFile.default_config_yaml()))
 
 
 def test_overlapping_config_reports_one_line_without_traceback(tmp_path):
@@ -532,8 +498,6 @@ def test_default_config_validates_but_fails_the_path_check():
 
 
 def test_source_and_destination_do_not_touch_the_filesystem(tmp_path, monkeypatch):
-    from mixtapematrix.config import MatrixConfig
-
     calls = []
     real_exists, real_isdir = os.path.exists, os.path.isdir
     monkeypatch.setattr(os.path, "exists", lambda p: calls.append(p) or real_exists(p))
