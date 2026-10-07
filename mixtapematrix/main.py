@@ -6,7 +6,7 @@ from functools import cached_property
 import click
 import yaml
 
-from .cache import TAG_FIELDS, TagCache, Tags, clean_cache, parse_ttl
+from .cache import TAG_FIELDS, TagCache, Tags, clean_cache
 from .config import ConfigFile, MatrixConfig
 from .describe import describe
 from .lock import LockError, single_instance
@@ -61,7 +61,7 @@ class MixtapeMatrix:
         return TagCache(
             self.config,
             matrix_config.source.path,
-            parse_ttl(cache_config.ttl),
+            cache_config.ttl,
             log=self.logger,
             debug=self.debug,
         )
