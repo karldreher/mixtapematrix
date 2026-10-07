@@ -46,12 +46,14 @@ class MixtapeMatrix:
     def config_data(self) -> ConfigFile:
         try:
             with open(self.config) as f:
-                return ConfigFile.model_validate(yaml.safe_load(f))
+                config = ConfigFile.model_validate(yaml.safe_load(f))
         except FileNotFoundError:
             raise click.ClickException(
                 f"Config file not found: {self.config}. "
                 "Create one with `mixtape init` or pass --config."
             ) from None
+        config.check_paths()
+        return config
 
     def tag_cache(self, matrix_config: MatrixConfig) -> TagCache | None:
         """The tag cache for a matrix, or None when caching is off for this run."""
@@ -158,7 +160,6 @@ class MixtapeMatrix:
             # Listing first runs tag discovery (and its bar) to completion, and
             # gives the copy bar a total.
             files = list(router.source)
-            # source and destination are computed properties that stat on every access.
             source, destination = matrix_config.source, matrix_config.destination
             label = f"Copying files from {source.path}"
             with self.progress(label, len(files)) as bar:

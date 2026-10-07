@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import timedelta
 
 import click
@@ -406,3 +407,108 @@ def test_non_tail_wildcards_rejected(path):
             destination_path="b",
             mp3_files=[{"artist": "x"}],
         )
+
+
+def path_config(tmp_path, source, destination):
+    config = tmp_path / "matrix.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "matrix": [
+                    {
+                        "source_path": str(source),
+                        "destination_path": str(destination),
+                        "mp3_files": [{"artist": "Alpha"}],
+                    }
+                ]
+            }
+        )
+    )
+    return config
+
+
+COMMANDS = [
+    ["run"],
+    ["list", "tag", "artist"],
+    ["describe", "tag", "artist"],
+    ["describe", "untagged"],
+]
+
+
+@pytest.fixture
+def library_dirs(tmp_path):
+    source, destination = tmp_path / "library", tmp_path / "out"
+    source.mkdir()
+    destination.mkdir()
+    return source, destination
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+@pytest.mark.parametrize(
+    ("field", "problem", "make_bad"),
+    [
+        ("source_path", "does not exist", None),
+        ("destination_path", "does not exist", None),
+        ("source_path", "is not a directory", "file"),
+        ("destination_path", "is not a directory", "file"),
+    ],
+)
+def test_bad_source_or_destination_is_a_one_line_error(
+    tmp_path, library_dirs, command, field, problem, make_bad
+):
+    paths = dict(zip(("source_path", "destination_path"), library_dirs, strict=True))
+    bad = tmp_path / "bad"
+    if make_bad == "file":
+        bad.touch()
+    paths[field] = bad
+    config = path_config(tmp_path, *paths.values())
+    result = CliRunner().invoke(cli, [*command, "--config", str(config)])
+    assert result.exit_code != 0
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert result.output.strip() == f"Error: matrix[0].{field}: {bad} {problem}"
+
+
+def test_bad_path_is_reported_before_discovery(tmp_path, library_dirs, monkeypatch):
+    from mixtapematrix.routers import mp3_router
+
+    def fail(*args, **kwargs):
+        raise AssertionError("tags were read")
+
+    monkeypatch.setattr(mp3_router, "read_tags", fail)
+    (library_dirs[0] / "song.mp3").touch()
+    config = path_config(tmp_path, library_dirs[0], tmp_path / "missing")
+    result = CliRunner().invoke(cli, ["run", "--config", str(config)])
+    assert result.exit_code != 0
+    assert "destination_path" in result.output
+
+
+def test_default_config_validates_but_fails_the_path_check():
+    config = ConfigFile.model_validate(yaml.safe_load(ConfigFile.default_config_yaml()))
+    with pytest.raises(click.ClickException, match="source_path"):
+        config.check_paths()
+
+
+def test_source_and_destination_do_not_touch_the_filesystem(tmp_path, monkeypatch):
+    from mixtapematrix.config import MatrixConfig
+
+    calls = []
+    real_exists, real_isdir = os.path.exists, os.path.isdir
+    monkeypatch.setattr(os.path, "exists", lambda p: calls.append(p) or real_exists(p))
+    monkeypatch.setattr(os.path, "isdir", lambda p: calls.append(p) or real_isdir(p))
+    matrix = MatrixConfig(
+        source_path="/no/such/source",
+        destination_path="/no/such/destination",
+        mp3_files=[{"artist": "x"}],
+    )
+    for _ in range(3):
+        assert matrix.source.path == "/no/such/source"
+        assert matrix.destination.path == "/no/such/destination"
+    assert calls == []
+    assert matrix.source is matrix.source
+
+
+def test_no_path_is_special_cased_by_prefix(tmp_path):
+    from mixtapematrix.routers.files import File
+
+    with pytest.raises(ValueError, match="does not exist"):
+        File(path="/example/anything")
