@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 from helpers import make_mp3
 
-from mixtapematrix import main
+from mixtapematrix import service
 from mixtapematrix.main import cli
 from mixtapematrix.progress import TerminalProgress
 
@@ -120,6 +120,6 @@ def test_verbose_and_debug_runs_show_no_bars(tmp_path, flag):
 def main_run(config, calls, *args):
     """Run the CLI with terminal_progress replaced by a recording factory."""
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(main, "TerminalProgress", lambda: recording_factory(calls))
+        mp.setattr(service, "TerminalProgress", lambda: recording_factory(calls))
         result = CliRunner().invoke(cli, ["run", "--config", str(config), *args])
     assert result.exit_code == 0, result.output
