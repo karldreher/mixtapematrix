@@ -1,13 +1,11 @@
-import functools
-
 import click
 from pydantic import ValidationError
 
+from mixtapematrix.options import filter_options, filters, library_options
 from mixtapematrix.service import MixtapeMatrix
 
 from .cache import (
     TAG_FIELDS,
-    TagField,
     clean_cache,
     list_cache,
 )
@@ -20,6 +18,9 @@ def _format_bytes(size: float) -> str:
         if size < 1024 or unit == "GiB":
             return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
         size /= 1024
+
+
+__all__ = ["MixtapeMatrix", "cli"]
 
 
 class MixtapeGroup(click.Group):
@@ -53,59 +54,8 @@ def cli(ctx):
         click.echo(f"Warning: {e} Continuing anyway.", err=True)
 
 
-def _library_options(refresh: bool = False):
-    """
-    The options every command that reads the library shares, plus --refresh when
-    asked. The command receives a MixtapeMatrix built from them as `matrix`.
-    """
-
-    def decorate(func):
-        @functools.wraps(func)
-        def command(*, config, debug, verbose, no_cache, refresh=False, **kwargs):
-            prune = kwargs.pop("prune", False)
-            matrix = MixtapeMatrix(
-                config=config,
-                debug=debug,
-                verbose=verbose,
-                use_cache=not no_cache,
-                prune=prune,
-                refresh=refresh,
-            )
-            return func(matrix=matrix, **kwargs)
-
-        options = [
-            click.option(
-                "--config", default="matrix.yaml", help="The YAML configuration file"
-            ),
-            click.option("--debug", help="Enable debug logging", is_flag=True),
-            click.option(
-                "--verbose",
-                is_flag=True,
-                help="Show ID3 tag warnings (non-standard genres, invalid dates, ...)",
-            ),
-            click.option(
-                "--no-cache", is_flag=True, help="Ignore the tag cache for this run"
-            ),
-        ]
-        if refresh:
-            options.insert(
-                0,
-                click.option(
-                    "--refresh",
-                    is_flag=True,
-                    help="Rescan the library and rewrite the tag cache, instead of "
-                    "reading the cache as is",
-                ),
-            )
-        for option in reversed(options):
-            command = option(command)
-        return command
-
-    return decorate
-
-
 @cli.command()
-@_library_options()
+@library_options()
 @click.option(
     "--prune",
     is_flag=True,
@@ -133,31 +83,10 @@ def list_group():
     """List information about the music library."""
 
 
-def _filter_options(func):
-    """Adds one --<tag> filter option per tag field, e.g. --artist, --album-artist."""
-    for name in reversed(TAG_FIELDS):
-        flags = {f"--{name.replace('_', '-')}", f"--{name}"}
-        func = click.option(
-            *sorted(flags, reverse=True),
-            f"filter_{name}",
-            help=f"Only count files whose {name} matches (case-insensitive)",
-        )(func)
-    return func
-
-
-def _filters(options: dict) -> dict[TagField, str]:
-    """The --<tag> filters that were given, keyed by tag name."""
-    return {
-        name: options[f"filter_{name}"]
-        for name in TAG_FIELDS
-        if options[f"filter_{name}"] is not None
-    }
-
-
 @list_group.command(name="tag")
 @click.argument("field", type=click.Choice(TAG_FIELDS))
-@_filter_options
-@_library_options(refresh=True)
+@filter_options
+@library_options(refresh=True)
 def list_tag(field, matrix, **options):
     """List distinct values of a tag.
 
@@ -188,7 +117,7 @@ def list_tag(field, matrix, **options):
       mixtape list tag genre --config other.yaml
       mixtape list tag album_artist --no-cache
     """
-    for value in matrix.list_tag(field, where=_filters(options)):
+    for value in matrix.list_tag(field, where=filters(options)):
         click.echo(value)
 
 
@@ -200,8 +129,8 @@ def describe_group():
 @describe_group.command(name="tag")
 @click.argument("field", type=click.Choice(TAG_FIELDS))
 @click.argument("value", required=False)
-@_filter_options
-@_library_options(refresh=True)
+@filter_options
+@library_options(refresh=True)
 def describe_tag(field, value, matrix, **options):
     """Show a tag's values as a tree.
 
@@ -237,12 +166,12 @@ def describe_tag(field, value, matrix, **options):
       mixtape describe tag genre funk          only the funk section
       mixtape describe tag genre --artist Alpha
     """
-    for line in matrix.describe_tag(field, value, where=_filters(options)):
+    for line in matrix.describe_tag(field, value, where=filters(options)):
         click.echo(line)
 
 
 @describe_group.command(name="untagged")
-@_library_options()
+@library_options()
 def describe_untagged(matrix):
     """List MP3 files that have no ID3 tag.
 
