@@ -14,6 +14,7 @@ COMMANDS = [
     ["cache", "list"],
     ["cache", "clean"],
     ["cache", "clean", "--all"],
+    ["completions"],
 ]
 
 

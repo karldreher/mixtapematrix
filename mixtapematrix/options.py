@@ -28,7 +28,10 @@ def library_options(refresh: bool = False):
 
         options = [
             click.option(
-                "--config", default="matrix.yaml", help="The YAML configuration file"
+                "--config",
+                default="matrix.yaml",
+                type=click.Path(dir_okay=False),
+                help="The YAML configuration file",
             ),
             click.option("--debug", help="Enable debug logging", is_flag=True),
             click.option(

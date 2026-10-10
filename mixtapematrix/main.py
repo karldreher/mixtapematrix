@@ -2,6 +2,7 @@ import click
 from pydantic import ValidationError
 
 from mixtapematrix.commands.cache import cache_group
+from mixtapematrix.commands.completions import completions
 from mixtapematrix.commands.describe import describe_group
 from mixtapematrix.commands.list import list_group
 from mixtapematrix.commands.run import init, run
@@ -47,3 +48,4 @@ cli.add_command(describe_group)
 cli.add_command(list_group)
 cli.add_command(run)
 cli.add_command(init)
+cli.add_command(completions)
