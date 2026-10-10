@@ -3,6 +3,7 @@ import functools
 import click
 
 from mixtapematrix.cache import TAG_FIELDS, TagField
+from mixtapematrix.lock import hold_lock
 from mixtapematrix.service import MixtapeMatrix
 
 
@@ -15,6 +16,7 @@ def library_options(refresh: bool = False):
     def decorate(func):
         @functools.wraps(func)
         def command(*, config, debug, verbose, no_cache, refresh=False, **kwargs):
+            hold_lock()
             prune = kwargs.pop("prune", False)
             matrix = MixtapeMatrix(
                 config=config,

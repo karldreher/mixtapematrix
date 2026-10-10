@@ -1,6 +1,7 @@
 import click
 
 from mixtapematrix.cache import clean_cache, list_cache
+from mixtapematrix.lock import locked
 
 
 def _format_bytes(size: float) -> str:
@@ -32,6 +33,7 @@ def list_command():
 @click.option(
     "--all", "all_files", is_flag=True, help="Delete every cache file, not only stale"
 )
+@locked
 def clean(all_files):
     """Delete stale tag caches (expired, orphaned, or unreadable)."""
     removed = clean_cache(all_files=all_files)

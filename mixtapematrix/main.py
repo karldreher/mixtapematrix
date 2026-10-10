@@ -6,7 +6,6 @@ from mixtapematrix.commands.completions import completions
 from mixtapematrix.commands.describe import describe_group
 from mixtapematrix.commands.list import list_group
 from mixtapematrix.commands.run import init, run
-from mixtapematrix.lock import LockError, single_instance
 from mixtapematrix.service import MixtapeMatrix
 
 __all__ = ["MixtapeMatrix", "cli"]
@@ -35,12 +34,6 @@ def cli(ctx):
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
         ctx.exit(1)
-    # Every subcommand holds the lock until it finishes. A second instance is
-    # warned about, not blocked: concurrent runs are discouraged, not forbidden.
-    try:
-        ctx.with_resource(single_instance())
-    except LockError as e:
-        click.echo(f"Warning: {e} Continuing anyway.", err=True)
 
 
 cli.add_command(cache_group)
