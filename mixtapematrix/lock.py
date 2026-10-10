@@ -1,10 +1,13 @@
 """Single-instance lock: detects another mixtape process running at the same time."""
 
+import functools
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+
+import click
 
 # The lock lives only in the kernel: no file is created and nothing touches the
 # network. The OS releases it when the process exits or is killed, so it can
@@ -33,6 +36,27 @@ def single_instance() -> Iterator[None]:
     else:
         with _home_flock():
             yield
+
+
+def hold_lock() -> None:
+    """Hold the lock until the running command finishes. A second instance is
+    warned about, not blocked: concurrent runs are discouraged, not forbidden."""
+    try:
+        click.get_current_context().with_resource(single_instance())
+    except LockError as e:
+        click.echo(f"Warning: {e} Continuing anyway.", err=True)
+
+
+def locked(func: Callable) -> Callable:
+    """Decorate a command that writes (files or the cache) so it holds the lock.
+    Read-only commands are left undecorated."""
+
+    @functools.wraps(func)
+    def command(*args, **kwargs):
+        hold_lock()
+        return func(*args, **kwargs)
+
+    return command
 
 
 @contextmanager

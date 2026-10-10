@@ -8,13 +8,19 @@ from click.testing import CliRunner
 from mixtapematrix.lock import AlreadyRunningError, LockError, single_instance
 from mixtapematrix.main import cli
 
+# Commands that write files or the cache hold the lock.
 COMMANDS = [
     ["run", "--config", "missing.yaml"],
     ["init"],
-    ["cache", "list"],
     ["cache", "clean"],
     ["cache", "clean", "--all"],
+    ["list", "tag", "artist", "--config", "missing.yaml"],
+    ["describe", "tag", "artist", "--config", "missing.yaml"],
+    ["describe", "untagged", "--config", "missing.yaml"],
 ]
+
+# Read-only commands do not touch the lock at all.
+UNLOCKED_COMMANDS = [["cache", "list"], ["completions"], ["--help"]]
 
 
 def test_lock_is_exclusive_and_released():
@@ -31,8 +37,9 @@ def test_second_instance_warns_and_proceeds(tmp_path, monkeypatch, args):
         result = CliRunner().invoke(cli, args)
     assert "Warning: Another mixtape instance is already running." in result.output
     assert "Continuing anyway" in result.output
-    if args[0] == "run":
-        # run proceeds to its own work, which fails here only for the missing config
+    if "--config" in args:
+        # the command proceeds to its own work, which fails here only for the
+        # missing config
         assert result.exit_code != 0
         assert "Config file not found: missing.yaml" in result.output
     else:
@@ -68,9 +75,13 @@ def test_lock_is_released_after_init_exits(tmp_path, monkeypatch):
     assert runner.invoke(cli, ["cache", "clean"]).exit_code == 0
 
 
-def test_help_does_not_need_the_lock():
+@pytest.mark.parametrize("args", UNLOCKED_COMMANDS)
+def test_read_only_commands_ignore_the_lock(tmp_path, monkeypatch, args):
+    monkeypatch.chdir(tmp_path)
     with single_instance():
-        assert CliRunner().invoke(cli, ["--help"]).exit_code == 0
+        result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0
+    assert "Warning" not in result.output
 
 
 def test_lock_held_by_another_process_blocks_and_dies_with_it(tmp_path, monkeypatch):

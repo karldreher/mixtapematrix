@@ -1,6 +1,7 @@
 import click
 
 from mixtapematrix.config import ConfigFile
+from mixtapematrix.lock import locked
 from mixtapematrix.options import library_options
 
 
@@ -23,6 +24,7 @@ def run(matrix):
     is_flag=True,
     help="Skip writing matrix.schema.json and the schema modeline",
 )
+@locked
 def init(no_json_schema, force):
     """Create a default matrix.yaml and matrix.schema.json in the current directory."""
     ConfigFile.create_default_config(json_schema=not no_json_schema, force=force)
