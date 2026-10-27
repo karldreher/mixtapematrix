@@ -311,8 +311,21 @@ class ConfigFile(BaseModel):
         )
 
     @staticmethod
-    def create_default_config(json_schema: bool = True, force: bool = False):
-        config_path, schema_path = Path(CONFIG_FILENAME), Path(SCHEMA_FILENAME)
+    def write_schema():
+        # The schema is derived from the models, so it is always refreshed.
+        Path(SCHEMA_FILENAME).write_text(
+            json.dumps(ConfigFile.json_schema(), indent=2) + "\n"
+        )
+        click.echo(f"JSON Schema written to {SCHEMA_FILENAME}")
+
+    @staticmethod
+    def create_default_config(
+        json_schema: bool = True, force: bool = False, schema_only: bool = False
+    ):
+        if schema_only:
+            ConfigFile.write_schema()
+            sys.exit(0)
+        config_path = Path(CONFIG_FILENAME)
         if config_path.exists() and not force:
             click.echo(
                 f"Configuration file already exists at {CONFIG_FILENAME}. "
@@ -322,9 +335,5 @@ class ConfigFile(BaseModel):
         config_path.write_text(ConfigFile.default_config_yaml(json_schema))
         click.echo(f"Default configuration file created at {CONFIG_FILENAME}")
         if json_schema:
-            # The schema is derived from the models, so it is always refreshed.
-            schema_path.write_text(
-                json.dumps(ConfigFile.json_schema(), indent=2) + "\n"
-            )
-            click.echo(f"JSON Schema written to {SCHEMA_FILENAME}")
+            ConfigFile.write_schema()
         sys.exit(0)

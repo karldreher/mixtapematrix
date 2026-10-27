@@ -152,6 +152,29 @@ def test_init_no_json_schema(tmp_path, monkeypatch):
     ConfigFile.model_validate(yaml.safe_load(text))
 
 
+def test_init_schema_only_leaves_config_alone(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    assert runner.invoke(cli, ["init", "--schema-only"]).exit_code == 0
+    assert not (tmp_path / "matrix.yaml").exists()
+    schema_path = tmp_path / "matrix.schema.json"
+    assert json.loads(schema_path.read_text()) == ConfigFile.json_schema()
+    # works alongside an existing config and refreshes a stale schema
+    (tmp_path / "matrix.yaml").write_text("matrix: []\n")
+    schema_path.write_text("{}")
+    assert runner.invoke(cli, ["init", "--schema-only"]).exit_code == 0
+    assert (tmp_path / "matrix.yaml").read_text() == "matrix: []\n"
+    assert json.loads(schema_path.read_text()) == ConfigFile.json_schema()
+
+
+@pytest.mark.parametrize("other", ["--no-json-schema", "--force"])
+def test_init_schema_only_conflicts(tmp_path, monkeypatch, other):
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(cli, ["init", "--schema-only", other])
+    assert result.exit_code == 2
+    assert not (tmp_path / "matrix.schema.json").exists()
+
+
 def test_init_force_overwrites(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "matrix.yaml").write_text("matrix: []\n")
