@@ -95,7 +95,25 @@ Excludes are applied in order, path first and then tag:
 
 A file is copied when it matches at least one entry and no exclude applies (by path or by tag). An entry needs at least one tag of its own, so "everything except X" is not supported.
 
-`exclude:` is applied to cached tags, so adding or changing one never invalidates the tag cache.
+### Narrowing an entry with `include:`
+
+`include:` is the inverse of `exclude:`. A file that matches the entry is kept only if it also matches the `include:` block, so the two are ANDed:
+
+```yaml
+- album_artist: Bush
+  include:
+    album: Razorblade Suitcase   # Bush, and only that album
+```
+
+It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, `folder`, scalar or list values, and nested `include`/`exclude`), is case-insensitive, and may be combined with `exclude:` on the same entry. Notes:
+
+- Like `exclude:`, an entry with an `include:` needs at least one tag or a folder of its own.
+- Several keys inside one `include:` are OR'd, as everywhere else. To require several keys, nest: `include: {artist: X, include: {genre: Y}}`.
+- An include that contradicts its entry (`artist: A` with `include: {artist: B}`) is valid and matches nothing.
+- An `include:` inside an `exclude:` narrows the exclusion: `exclude: {artist: X, include: {album: Y}}` removes only X's album Y.
+- `exclude_paths` still removes locations first, and an entry's `include:` only narrows that entry, so another entry can still match the file.
+
+`include:` and `exclude:` are applied to cached tags, so adding or changing one never invalidates the tag cache.
 
 ## Run the tool
 

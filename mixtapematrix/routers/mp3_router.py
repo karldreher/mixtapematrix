@@ -100,14 +100,16 @@ def _tag_matches(tags: Tags, key: TagField, values: list[str]) -> bool:
 def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:
     """
     An entry matches when any of its own tags match, or its folder holds the (absolute)
-    path, and its exclude block does not. An exclude block is evaluated the same way,
-    so nested excludes work to any depth.
+    path, its include block (if any) does too, and its exclude block does not. Include and
+    exclude blocks are evaluated the same way, so they nest to any depth.
     """
     own = [(k, v) for k in TAG_FIELDS if (v := getattr(entry, k)) is not None]
     if not (
         any(_tag_matches(tags, k, v) for k, v in own)
         or (entry.folder is not None and subtree_test(entry.folder)(path))
     ):
+        return False
+    if entry.include is not None and not _entry_matches(tags, path, entry.include):
         return False
     return entry.exclude is None or not _entry_matches(tags, path, entry.exclude)
 
