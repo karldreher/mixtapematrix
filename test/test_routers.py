@@ -211,6 +211,17 @@ ENTRY_2 = {
         ),
         # case-insensitive, both for the entry and for the exception
         ([{"genre": "FUNK", "exclude": {"artist": "ARTIST c"}}], ["f1", "fb"]),
+        # a list excludes any of its values, case-insensitively
+        (
+            [{"genre": "funk", "exclude": {"artist": ["artist c", "Artist B"]}}],
+            ["f1"],
+        ),
+        (
+            [{"genre": "funk", "exclude": {"album": ["Album Name 1", "Album Name 4"]}}],
+            ["fb", "fc2"],
+        ),
+        # a list on an entry matches any of its values
+        ([{"artist": ["Artist B", "Artist C"]}], ["fb", "fc2", "fc4"]),
         # nested: exclude artist C unless it is album 4
         (
             [

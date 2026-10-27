@@ -11,6 +11,7 @@ from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
+    Field,
     WithJsonSchema,
     field_validator,
     model_validator,
@@ -46,6 +47,26 @@ TimeToLive = Annotated[
 """A duration like 30m, 2d, or 1mo, parsed into a timedelta at validation time."""
 
 
+def _as_list(value: Any) -> Any:
+    return [value] if isinstance(value, str) else value
+
+
+TagValues = Annotated[
+    list[str],
+    Field(min_length=1),
+    BeforeValidator(_as_list),
+    WithJsonSchema(
+        {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "array", "items": {"type": "string"}, "minItems": 1},
+            ]
+        }
+    ),
+]
+"""One tag value, or a non-empty list of values of which any may match."""
+
+
 class Mp3Match(BaseModel):
     """
     A set of ID3 tags and a folder to match. A file is copied when any listed key
@@ -54,14 +75,18 @@ class Mp3Match(BaseModel):
 
     model_config = _STRICT
 
-    artist: str | None = None
-    """Match files whose artist tag equals this value (case-insensitive)."""
-    album: str | None = None
-    """Match files whose album tag equals this value (case-insensitive)."""
-    genre: str | None = None
-    """Match files whose genre tag equals this value (case-insensitive)."""
-    album_artist: str | None = None
-    """Match files whose album artist tag equals this value (case-insensitive)."""
+    artist: TagValues | None = None
+    """Match files whose artist tag equals this value, or any value in a list
+    (case-insensitive)."""
+    album: TagValues | None = None
+    """Match files whose album tag equals this value, or any value in a list
+    (case-insensitive)."""
+    genre: TagValues | None = None
+    """Match files whose genre tag equals this value, or any value in a list
+    (case-insensitive)."""
+    album_artist: TagValues | None = None
+    """Match files whose album artist tag equals this value, or any value in a list
+    (case-insensitive)."""
     folder: PathPattern | None = None
     """Match files beneath this absolute directory, which must be inside source_path.
     Matched on whole path components, so /music/rock does not match /music/rockabilly.
@@ -265,6 +290,9 @@ class ConfigFile(BaseModel):
             "#   - artist: Artist Name\n"
             "#     exclude:\n"
             "#       album: Album Name\n"
+            "#   - genre: funk   # a tag takes one value or a list\n"
+            "#     exclude:\n"
+            "#       artist: [Artist B, Artist C]\n"
             "#   - folder: /path/to/source/Mixes\n"
             "#     exclude:\n"
             "#       genre: Podcast\n"

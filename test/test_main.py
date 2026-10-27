@@ -354,6 +354,15 @@ def test_exclude_only_entry_rejected():
     Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
 
 
+def test_tag_values_accept_scalar_or_list():
+    assert Mp3Match(album="X").album == ["X"]
+    assert Mp3Match(album=["X", "Y"]).album == ["X", "Y"]
+    with pytest.raises(ValueError, match="at least 1"):
+        Mp3Match(album=[])
+    with pytest.raises(ValueError, match="at least one tag"):
+        Mp3Match(exclude={"album": ["X", "Y"]})
+
+
 def test_missing_exclude_path_is_a_one_line_error(tmp_path):
     library = tmp_path / "library"
     library.mkdir()

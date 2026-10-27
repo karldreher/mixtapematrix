@@ -78,7 +78,7 @@ class MixtapeMatrix:
         """
         for _, router in self._routers():
             for path, tags in router.entries(refresh=self.refresh):
-                if all(_tag_matches(tags, k, v) for k, v in where):
+                if all(_tag_matches(tags, k, [v]) for k, v in where):
                     yield path, tags
 
     def list_tag(
