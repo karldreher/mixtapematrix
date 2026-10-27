@@ -247,6 +247,77 @@ def test_exclude_blocks(tmp_path, catalog, entries, expected):
     assert names == expected
 
 
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        # include narrows an entry to files that also match it
+        ([{"artist": "Artist Name", "include": {"genre": "funk"}}], ["f1"]),
+        ([{"artist": "Artist Name", "include": {"album": "Album Name 3"}}], ["r3"]),
+        # case-insensitive, on both the entry and the include
+        ([{"artist": "ARTIST name", "include": {"album": "album name 3"}}], ["r3"]),
+        # a list on an include matches any of its values
+        (
+            [{"genre": "funk", "include": {"artist": ["Artist B", "Artist C"]}}],
+            ["fb", "fc2", "fc4"],
+        ),
+        ([{"genre": "funk", "include": {"album_artist": "various"}}], ["fb"]),
+        # several keys in one include are OR'd
+        (
+            [{"genre": "funk", "include": {"artist": "Artist B", "album": "Album Name 4"}}],
+            ["fb", "fc4"],
+        ),
+        # nesting an include requires every key
+        (
+            [
+                {
+                    "genre": "funk",
+                    "include": {
+                        "artist": "Artist C",
+                        "include": {"album": "Album Name 4"},
+                    },
+                }
+            ],
+            ["fc4"],
+        ),
+        # include and exclude on the same entry both apply
+        (
+            [
+                {
+                    "genre": "funk",
+                    "include": {"artist": "Artist C"},
+                    "exclude": {"album": "Album Name 2"},
+                }
+            ],
+            ["fc4"],
+        ),
+        # an include inside an exclude narrows the exclusion
+        (
+            [
+                {
+                    "genre": "funk",
+                    "exclude": {"artist": "Artist C", "include": {"album": "Album Name 4"}},
+                }
+            ],
+            ["f1", "fb", "fc2"],
+        ),
+        # an include that cannot hold alongside its entry matches nothing
+        ([{"artist": "Artist B", "include": {"artist": "Artist C"}}], []),
+        # entries stay OR'd
+        (
+            [
+                {"artist": "Artist Name", "include": {"genre": "rock"}},
+                {"artist": "Artist C", "include": {"album": "Album Name 2"}},
+            ],
+            ["fc2", "r1", "r3"],
+        ),
+    ],
+)
+def test_include_blocks(tmp_path, catalog, entries, expected):
+    router = make_router(tmp_path, catalog, entries, cache=False)
+    names = [name.removesuffix(".mp3") for name in matched(router)]
+    assert names == expected
+
+
 def test_exclude_changes_need_no_tag_rereads(tmp_path, catalog, read_counter):
     first = make_router(tmp_path, catalog, [{"artist": "Artist Name"}])
     assert len(matched(first)) == 3

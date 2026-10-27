@@ -377,6 +377,20 @@ def test_exclude_only_entry_rejected():
     Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
 
 
+def test_include_only_entry_rejected():
+    with pytest.raises(ValueError, match="at least one tag"):
+        Mp3Match(include={"album": "X"})
+    with pytest.raises(ValueError, match="at least one tag"):
+        Mp3Match(artist="A", include={"include": {"album": "X"}})
+    with pytest.raises(ValueError, match="at least 1"):
+        Mp3Match(album_artist="A", include={"album": []})
+    Mp3Match(album_artist="Bush", include={"album": "Razorblade Suitcase"})
+    assert Mp3Match(folder="/music/a", include={"folder": "/music/a/b"}).folders() == [
+        "/music/a",
+        "/music/a/b",
+    ]
+
+
 def test_tag_values_accept_scalar_or_list():
     assert Mp3Match(album="X").album == ["X"]
     assert Mp3Match(album=["X", "Y"]).album == ["X", "Y"]

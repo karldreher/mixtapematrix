@@ -70,7 +70,8 @@ TagValues = Annotated[
 class Mp3Match(BaseModel):
     """
     A set of ID3 tags and a folder to match. A file is copied when any listed key
-    matches, unless its exclude block matches.
+    matches, provided its include block (if any) also matches and its exclude block
+    does not.
     """
 
     model_config = _STRICT
@@ -94,6 +95,10 @@ class Mp3Match(BaseModel):
     everything whose path starts with /music/rock, and /music/rock/** everything
     beneath /music/rock. No other wildcards are supported.
     Only tagged MP3s are copied, as with tags."""
+    include: "Mp3Match | None" = None
+    """Narrows this entry: files it would match are kept only when any key listed here
+    also matches (tags case-insensitive). Takes the same keys as an entry, including a
+    nested include or exclude. Nest includes to require several keys at once."""
     exclude: "Mp3Match | None" = None
     """Files this entry would match are skipped when any key listed here matches
     (tags case-insensitive). Takes the same keys as an entry, including a nested exclude."""
@@ -110,22 +115,26 @@ class Mp3Match(BaseModel):
         return folder if is_glob(folder) else os.path.normpath(folder)
 
     @model_validator(mode="after")
-    def validate_exclude_has_key(self) -> "Mp3Match":
+    def validate_nested_has_key(self) -> "Mp3Match":
         has_key = any(
             (self.artist, self.album, self.genre, self.album_artist, self.folder)
         )
-        if self.exclude is not None and not has_key:
+        if (self.exclude is not None or self.include is not None) and not has_key:
             raise ValueError(
-                "An entry with an exclude block must also list at least one tag "
-                "(artist, album, genre, or album_artist) or a folder to match; "
+                "An entry with an include or exclude block must also list at least one "
+                "tag (artist, album, genre, or album_artist) or a folder to match; "
                 "'everything except X' is not supported."
             )
         return self
 
     def folders(self) -> list[str]:
-        """Every folder this entry names, including those in nested excludes."""
+        """Every folder this entry names, including those in nested includes and excludes."""
         own = [self.folder] if self.folder else []
-        return own + (self.exclude.folders() if self.exclude else [])
+        return (
+            own
+            + (self.include.folders() if self.include else [])
+            + (self.exclude.folders() if self.exclude else [])
+        )
 
 
 class MatrixConfig(BaseModel):
@@ -296,6 +305,10 @@ class ConfigFile(BaseModel):
             "#   - folder: /path/to/source/Mixes\n"
             "#     exclude:\n"
             "#       genre: Podcast\n"
+            "# an entry's include: keeps only files that also match it, e.g.\n"
+            "#   - album_artist: Bush\n"
+            "#     include:\n"
+            "#       album: Razorblade Suitcase\n"
             f"{body}"
             "# Optional: shell commands to run after copying files.\n"
             "# transform:\n"
