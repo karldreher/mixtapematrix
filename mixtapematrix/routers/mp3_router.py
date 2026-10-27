@@ -91,10 +91,10 @@ def read_tags(path: str) -> Tags | None:
         _current_file.reset(token)
 
 
-def _tag_matches(tags: Tags, key: TagField, value: str) -> bool:
-    """Case-insensitive match of a single tag (genre, artist, album, ...) against a value."""
+def _tag_matches(tags: Tags, key: TagField, values: list[str]) -> bool:
+    """Case-insensitive match of a single tag (genre, artist, album, ...) against any of the values."""
     tag_value = tags[TAG_INDEX[key]]
-    return tag_value is not None and tag_value.lower() == value.lower()
+    return tag_value is not None and tag_value.lower() in {v.lower() for v in values}
 
 
 def _entry_matches(tags: Tags, path: str, entry: Mp3Match) -> bool:

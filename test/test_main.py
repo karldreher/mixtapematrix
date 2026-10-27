@@ -152,6 +152,29 @@ def test_init_no_json_schema(tmp_path, monkeypatch):
     ConfigFile.model_validate(yaml.safe_load(text))
 
 
+def test_init_schema_only_leaves_config_alone(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    assert runner.invoke(cli, ["init", "--schema-only"]).exit_code == 0
+    assert not (tmp_path / "matrix.yaml").exists()
+    schema_path = tmp_path / "matrix.schema.json"
+    assert json.loads(schema_path.read_text()) == ConfigFile.json_schema()
+    # works alongside an existing config and refreshes a stale schema
+    (tmp_path / "matrix.yaml").write_text("matrix: []\n")
+    schema_path.write_text("{}")
+    assert runner.invoke(cli, ["init", "--schema-only"]).exit_code == 0
+    assert (tmp_path / "matrix.yaml").read_text() == "matrix: []\n"
+    assert json.loads(schema_path.read_text()) == ConfigFile.json_schema()
+
+
+@pytest.mark.parametrize("other", ["--no-json-schema", "--force"])
+def test_init_schema_only_conflicts(tmp_path, monkeypatch, other):
+    monkeypatch.chdir(tmp_path)
+    result = CliRunner().invoke(cli, ["init", "--schema-only", other])
+    assert result.exit_code == 2
+    assert not (tmp_path / "matrix.schema.json").exists()
+
+
 def test_init_force_overwrites(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "matrix.yaml").write_text("matrix: []\n")
@@ -352,6 +375,15 @@ def test_exclude_only_entry_rejected():
     with pytest.raises(ValueError, match="at least one"):
         Mp3Match(exclude={"folder": "/music/a"})
     Mp3Match(folder="/music/a", exclude={"folder": "/music/a/b"})
+
+
+def test_tag_values_accept_scalar_or_list():
+    assert Mp3Match(album="X").album == ["X"]
+    assert Mp3Match(album=["X", "Y"]).album == ["X", "Y"]
+    with pytest.raises(ValueError, match="at least 1"):
+        Mp3Match(album=[])
+    with pytest.raises(ValueError, match="at least one tag"):
+        Mp3Match(exclude={"album": ["X", "Y"]})
 
 
 def test_missing_exclude_path_is_a_one_line_error(tmp_path):

@@ -3,7 +3,7 @@ from typing import get_args
 import pytest
 
 from mixtapematrix.cache import TAG_FIELDS, TAG_INDEX, TagField
-from mixtapematrix.config import Mp3Match
+from mixtapematrix.config import Mp3Match, TagValues
 
 
 def test_tag_fields_derive_from_the_literal():
@@ -11,9 +11,9 @@ def test_tag_fields_derive_from_the_literal():
 
 
 @pytest.mark.parametrize("name", TAG_FIELDS)
-def test_every_tag_field_is_a_str_or_none_field_of_mp3_match(name):
+def test_every_tag_field_is_a_tag_values_or_none_field_of_mp3_match(name):
     assert name in Mp3Match.model_fields
-    assert Mp3Match.model_fields[name].annotation == (str | None)
+    assert Mp3Match.model_fields[name].annotation == (TagValues | None)
 
 
 def test_tag_index_matches_position():

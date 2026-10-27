@@ -51,7 +51,7 @@ matrix:
       - folder: /home/me/my-music/Mixes
 ```
 
-You can create a default config file with `mixtape init`.  This also writes `matrix.schema.json` next to it, and the config references it with a `# yaml-language-server: $schema=./matrix.schema.json` comment.  With the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, VS Code then highlights errors and offers completions and type hints for the config.  Pass `--no-json-schema` to skip the schema file and the comment, and `--force` to overwrite an existing `matrix.yaml`.
+You can create a default config file with `mixtape init`.  This also writes `matrix.schema.json` next to it, and the config references it with a `# yaml-language-server: $schema=./matrix.schema.json` comment.  With the [Red Hat YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, VS Code then highlights errors and offers completions and type hints for the config.  Pass `--no-json-schema` to skip the schema file and the comment, and `--force` to overwrite an existing `matrix.yaml`.  Pass `--schema-only` to write just `matrix.schema.json` (for example to refresh it after upgrading) without touching `matrix.yaml`.
 
 Based on the config file, Mixtape Matrix will find any files in `source_path`, which match the directives in `mp3_files`.  If you want to keep funk and Fear Factory in your mixtape, the config file above is half-done for you!
 
@@ -77,7 +77,16 @@ mp3_files:
 Two options leave files out, and they work at different levels:
 
 - `exclude_paths` (per matrix) works on **locations**. Each entry is a directory or file, and everything beneath it is skipped without being read. A plain entry matches whole path components, so `rock` never excludes `Crockett`, and relative paths work however `source_path` is written. Plain entries must exist. An entry may end in `**` to match by prefix: `/music/rock**` skips everything whose path starts with `/music/rock` (including `rockabilly`), and `/music/rock/**` skips everything beneath `/music/rock`. `**` is only supported at the end of an entry, and glob entries need not exist.
-- `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, `folder`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists.
+- `exclude:` (inside an `mp3_files` entry) works on **tags**. It takes the same keys as an entry (`artist`, `album`, `genre`, `album_artist`, `folder`, and a nested `exclude`). Any tag may be used, whichever tag the entry itself lists. Each tag key takes one value or a list, and a file matches when it matches any value in the list:
+
+  ```yaml
+  exclude:
+    album: Cheese       # one value
+  exclude:
+    album:              # or several
+      - Pizza
+      - Cheese
+  ```
 
 Excludes are applied in order, path first and then tag:
 
