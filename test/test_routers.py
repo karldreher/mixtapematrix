@@ -263,7 +263,12 @@ def test_exclude_blocks(tmp_path, catalog, entries, expected):
         ([{"genre": "funk", "include": {"album_artist": "various"}}], ["fb"]),
         # several keys in one include are OR'd
         (
-            [{"genre": "funk", "include": {"artist": "Artist B", "album": "Album Name 4"}}],
+            [
+                {
+                    "genre": "funk",
+                    "include": {"artist": "Artist B", "album": "Album Name 4"},
+                }
+            ],
             ["fb", "fc4"],
         ),
         # nesting an include requires every key
@@ -295,7 +300,10 @@ def test_exclude_blocks(tmp_path, catalog, entries, expected):
             [
                 {
                     "genre": "funk",
-                    "exclude": {"artist": "Artist C", "include": {"album": "Album Name 4"}},
+                    "exclude": {
+                        "artist": "Artist C",
+                        "include": {"album": "Album Name 4"},
+                    },
                 }
             ],
             ["f1", "fb", "fc2"],
